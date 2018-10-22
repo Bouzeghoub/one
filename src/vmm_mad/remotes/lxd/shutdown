@@ -24,10 +24,10 @@ LXDriver.log_init
 vm_name = ARGV[0]
 vm_id = ARGV[2]
 
+info = LXDriver.action_xml
+
 client = LXDClient.new
 container = Container.get(vm_name, client)
-
-info = LXDriver.action_xml
 
 if ARGV[-1] == 'force'
     container.stop(:force => true)

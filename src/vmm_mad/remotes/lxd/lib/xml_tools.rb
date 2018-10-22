@@ -23,7 +23,7 @@ module LXDriver
             @vm_name = deploy_id
 
             @wild = false
-            @wild = true unless deploy_id == ''
+            @wild = true unless (deploy_id == '') || deploy_id.include?('one-')
             return if @wild
 
             @vm_name = 'one-' + @vm_id

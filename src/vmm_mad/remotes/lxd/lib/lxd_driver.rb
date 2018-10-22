@@ -63,6 +63,10 @@ module LXDriver
             XML.new(xml, XML::HOTPLUG_PREFIX)
         end
 
+        def save_xml(xml, path = '/tmp/deployment.xml')
+            File.open(path, 'w') {|file| file.write(xml) }
+        end
+
         # Returns a mapper class depending on the driver string
         def select_driver(driver)
             case driver
