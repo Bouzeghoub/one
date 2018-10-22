@@ -93,10 +93,15 @@ module LXDriver
             return if data['TYPE'] != 'VNC'
 
             pass = data['PASSWD'] # mandatory on vncterm
-            command = "lxc exec #{info.vm_name} login"
+
+            # command = single_element('LXD_VNC_COMMAND')
+            command = 'bash'
+            command = "lxc exec #{info.vm_name} #{command}"
+            
+            # TODO: Runc vnc command with a wrapper (semi-infinite loop)
             vnc_client = "vncterm -timeout 0 -passwd #{pass} -rfbport #{data['PORT']} -c #{command}"
 
-            Process.detach(spawn(vnc_client)) # TODO: Fix random server kill
+            Process.detach(spawn(vnc_client))
         end
 
         ###############
