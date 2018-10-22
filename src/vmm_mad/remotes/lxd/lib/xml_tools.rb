@@ -107,7 +107,7 @@ module LXDriver
         def profile(hash)
             profile = single_element('LXD_PROFILE', USER_TEMPLATE)
             profile ||= 'default'
-            hash['profile'] = profile
+            hash['profiles'] = [profile]
         end
 
         # TODO: Get data from USER_TEMPLATE(current) or TEMPLATE/FEATURES
@@ -270,9 +270,9 @@ module LXDriver
             self['config'] = {}
             self['devices'] = {}
 
+            xml.profile(self)
             xml.memory(self['config'])
             xml.cpu(self['config'])
-            xml.profile(self)
             xml.extra(self['config'])
             xml.network(self['devices'])
             xml.storage(self['devices'])
