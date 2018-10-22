@@ -28,7 +28,7 @@ module VNMMAD
 
             def initialize(hypervisor)
                 @nicClass = HYPERVISORS[hypervisor] || NicKVM
-                end
+            end
 
             def new_nic
                 @nicClass.new
@@ -95,38 +95,59 @@ module VNMMAD
         # interface that the NIC is using, based on the MAC address
         class NicLXD < Hash
 
-            require_relative '../vmm/lxd/lib/rest/client.rb'
-            require_relative '../vmm/lxd/lib/rest/container.rb'
-
             VNMNetwork::HYPERVISORS['lxd'] = self
+
             def initialize
                 super(nil)
             end
 
             # Get the VM information with lxc config show
             def get_info(vm)
-                deploy_id = vm['DEPLOY_ID']
-                deploy_id = vm.deploy_id if vm.deploy_id
+                if vm.deploy_id
+                    deploy_id = vm.deploy_id
+                else
+                    deploy_id = vm['DEPLOY_ID']
+                end
 
-                client = Client.new
-                container = Container.get(deploy_id, client)
+                if deploy_id && vm.vm_info[:dumpxml].nil?
+                    vm.vm_info[:dumpxml] = YAML.safe_load(`lxc config show #{deploy_id} 2>/dev/null`)
 
-                vm.info = container.info
+                    vm.vm_info.each_key do |k|
+                        vm.vm_info[k] = nil if vm.vm_info[k].to_s.strip.empty?
+                    end
+                end
             end
 
             # Look for the tap in config
             def get_tap(vm)
-                devices = vm.info['devices']
-                devices.each_key do |device|
-                    devices.delete(device) unless device.include? 'eth'
+                dumpxml = vm.vm_info[:dumpxml]
+
+                if dumpxml
+                    devices = dumpxml['devices']
+                    xpath = find_path(devices, self[:mac])
                 end
 
-                devices.each_value do |nic_info|
-                    next unless nic_info.key?('mac')
-
-                    self[:tap] = nic_info['host_name'] if nic_info['mac'] == self[:mac]
+                if xpath
+                    self[:tap] = devices[xpath]['host_name'] if devices[xpath]['host_name']
                 end
+
                 self
+            end
+
+            def find_path(hash, text)
+                path = '' unless path.is_a?(String)
+                hash.each do |k, v|
+                    if v == text
+                        return k
+                    end
+
+                    if v.is_a?(Hash)
+                        path = k
+                        tmp = find_path(v, text)
+                    end
+                    return path unless tmp.nil?
+                end
+                nil
             end
 
         end
