@@ -10,6 +10,7 @@ module LXDriver
         TEMPLATE_PREFIX = '//TEMPLATE/'
         HOTPLUG_PREFIX = 'VMM_DRIVER_ACTION_DATA/'
         USER_TEMPLATE = '//USER_TEMPLATE/'
+        CONTEXT = '/context'
 
         attr_reader :xml, :vm_id, :vm_name, :wild, :sysds_id, :datastores, :rootfs_id
 
@@ -168,7 +169,7 @@ module LXDriver
             info = complex_element('CONTEXT')
             disk_id = info['DISK_ID']
             source = LXDriver.device_path(self, disk_id, 'mapper/')
-            data = disk_basic(source, '/tmp/context')
+            data = disk_basic(source, CONTEXT)
             { 'context' => data }
         end
 
