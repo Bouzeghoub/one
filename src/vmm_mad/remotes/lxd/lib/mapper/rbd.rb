@@ -18,39 +18,19 @@
 
 require_relative 'mapper'
 
-# Mapping QCOW2 disks
-class QCOW2 < Mapper
+# Ceph RBD mapper
+class RBD < Mapper
 
-    def map(disk)
-        device = block
-        shell("sudo qemu-nbd -c #{device} #{disk}")
-        device
+    def initialize(ceph_user)
+        @ceph_user = ceph_user
+    end
+
+    def map(image)
+        `sudo rbd --id #{@ceph_user} map #{image}`.chomp
     end
 
     def unmap(block)
-        shell("sudo qemu-nbd -d #{block}")
-    end
-
-    # Returns the first valid nbd block in which to map the qcow2 disk
-    def block
-        nbds = `lsblk -l | grep nbd | awk '{print $1}'`.split("\n")
-
-        nbds.each {|nbd| nbds.delete(nbd) if nbd.include?('p') }
-        nbds.map! {|nbd| nbd[3..-1].to_i }
-
-        '/dev/nbd' + valid(nbds)
-    end
-
-    # logic to return the first available nbd
-    def valid(array)
-        ref = 0
-        array.each do |number|
-            break if number != ref
-
-            ref += 1
-        end
-
-        ref.to_s
+        shell("sudo rbd --id #{@ceph_user} unmap #{block}")
     end
 
 end

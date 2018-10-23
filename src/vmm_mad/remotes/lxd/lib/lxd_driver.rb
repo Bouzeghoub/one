@@ -26,9 +26,13 @@ end
 
 require 'rest/container'
 require 'rest/client'
+
 require 'xml_tools'
+
 require 'mapper/raw'
 require 'mapper/qcow2'
+require 'mapper/rbd'
+
 require 'scripts_common' # TODO: Check if works on node-only VM
 require 'opennebula' # TODO: Check if works on node-only VM
 
@@ -68,17 +72,35 @@ module LXDriver
         end
 
         # Returns a mapper class depending on the driver string
-        def select_driver(driver)
-            case driver
-            when 'raw'
-                RAW
-            when 'qcow2'
-                QCOW2
+        def select_driver(info)
+            case info['TYPE']
+            when 'FILE'
+                case info['DRIVER']
+                when 'raw'
+                    RAW.new
+                when 'qcow2'
+                    QCOW2.new
+                end
+            when 'RBD'
+                RBD.new(info['CEPH_USER'])
             end
         end
 
-        def device_path(info, disk_id, dir = '')
-            "#{info.datastores}#{info.sysds_id}/#{info.vm_id}/#{dir}disk.#{disk_id}"
+        def device_path(info, disk_info, dir = '')
+            disk_id = disk_info['DISK_ID']
+            vm_id = info.vm_id
+            mount = "#{info.datastores}#{info.sysds_id}/#{vm_id}/#{dir}disk.#{disk_id}"
+
+            return mount if dir != ''
+
+            case disk_info['TYPE']
+            when 'FILE'
+                mount
+            when 'RBD'
+                source = disk_info['SOURCE']
+                source = source + '-' + vm_id + '-' + disk_id if disk_info['DISK_CLONE'] == 'YES'
+                source
+            end
         end
 
         # TODO: discuss vncterm
@@ -97,7 +119,7 @@ module LXDriver
             # command = single_element('LXD_VNC_COMMAND')
             command = 'bash'
             command = "lxc exec #{info.vm_name} #{command}"
-            
+
             # TODO: Runc vnc command with a wrapper (semi-infinite loop)
             vnc_client = "vncterm -timeout 0 -passwd #{pass} -rfbport #{data['PORT']} -c #{command}"
 
@@ -112,29 +134,27 @@ module LXDriver
         def context(mountpoint, action)
             device = mountpoint.dup
             device.slice!('/mapper')
-            RAW.run(action, mountpoint, device)
+            RAW.new.run(action, mountpoint, device)
         end
 
         # Sets up the container mounts for type: disk devices
         def container_storage(info, action)
             disks = info.multiple_elements('DISK')
-            vm_id = info.vm_id
 
             disks.each do |disk|
                 disk_info = disk['DISK']
                 disk_id = disk_info['DISK_ID']
 
-                mountpoint = device_path(info, disk_id, 'mapper/')
-                mountpoint = CONTAINERS + 'one-' + vm_id if disk_id == info.rootfs_id
+                mountpoint = device_path(info, disk_info, 'mapper/')
+                mountpoint = CONTAINERS + 'one-' + info.vm_id if disk_id == info.rootfs_id
 
-                mapper = select_driver(disk_info['DRIVER'])
-                device = device_path(info, disk_id)
+                device = device_path(info, disk_info)
+
+                mapper = select_driver(disk_info)
                 mapper.run(action, mountpoint, device)
             end
 
-            if info.single_element('CONTEXT')
-                context(info.context['context']['source'], action)
-            end
+            context(info.context['context']['source'], action) if info.single_element('CONTEXT')
         end
 
         # Reverts changes if container fails to start

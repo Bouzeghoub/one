@@ -26,9 +26,8 @@ container = Container.get(vm_name, client)
 
 # mount and container disk creation
 source = disk_hash.values[0]['source']
-disk_id = source.split('.')[-1]
-device = LXDriver.device_path(info, disk_id)
-mapper = LXDriver.select_driver(disk_info['DRIVER'])
+device = LXDriver.device_path(info, disk_info)
+mapper = LXDriver.select_driver(disk_info)
 mapper.run('map', source, device)
 
 container.devices.update(disk_hash)

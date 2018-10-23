@@ -167,8 +167,7 @@ module LXDriver
         # Creates the context iso device hash
         def context
             info = complex_element('CONTEXT')
-            disk_id = info['DISK_ID']
-            source = LXDriver.device_path(self, disk_id, 'mapper/')
+            source = LXDriver.device_path(self, info, 'mapper/')
             data = disk_basic(source, CONTEXT)
             { 'context' => data }
         end
@@ -176,7 +175,7 @@ module LXDriver
         def disk(info)
             disk = disk_common(info)
             disk_id = info['DISK_ID']
-            source = LXDriver.device_path(self, disk_id, 'mapper/')
+            source = LXDriver.device_path(self, info, 'mapper/')
             path = info['TARGET'] # TODO: path is TARGET: hda, hdc, hdd
             path = "/media/#{disk_id}" unless path.include?('/')
             { "disk#{disk_id}" => disk.update(disk_basic(source, path)) }

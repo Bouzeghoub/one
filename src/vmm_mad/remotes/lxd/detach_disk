@@ -23,7 +23,7 @@ container = Container.get(vm_name, client)
 mount = container.devices.delete('disk' + disk_info['DISK_ID'])['source']
 container.update
 
-mapper = LXDriver.select_driver(disk_info['DRIVER'])
+mapper = LXDriver.select_driver(disk_info)
 mapper.run('unmap', mount)
 
 LXDriver.log_end(t0)
