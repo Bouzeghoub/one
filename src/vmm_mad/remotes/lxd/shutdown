@@ -29,7 +29,7 @@ info = LXDriver.action_xml
 client = LXDClient.new
 container = Container.get(vm_name, client)
 
-if ARGV[-1] == 'force'
+if ARGV[-1] == '-f'
     container.stop(:force => true)
 else
     container.stop
