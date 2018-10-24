@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/ruby
 
 # -------------------------------------------------------------------------- #
 # Copyright 2002-2018, OpenNebula Project, OpenNebula Systems                #
@@ -16,5 +16,22 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-#TODO: start vnc server also
-lxc restart $1
+t0 = Time.now
+require_relative 'lib/lxd_driver'
+
+LXDriver.log_init
+
+client = LXDClient.new
+container = Container.get(ARGV[0], client)
+
+if ARGV[-1] == '-f'
+    container.stop(:force => true)
+else
+    container.stop
+end
+
+container.start
+
+LXDriver.vnc(LXDriver::XML.new(container.config['user.xml']))
+
+LXDriver.log_end(t0)

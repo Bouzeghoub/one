@@ -24,7 +24,8 @@ LXDriver.log_init
 xml_path = ARGV[0]
 vm_id = ARGV[2]
 
-info = LXDriver::XML.new(STDIN.read)
+xml = STDIN.read
+info = LXDriver::XML.new(xml)
 client = LXDClient.new
 
 container = nil
@@ -34,11 +35,13 @@ if info.wild
 else
     yaml = LXDriver::YAML.new(info)
     container = Container.new(yaml, client)
-
     LXDriver.container_create(container, client)
     LXDriver.container_storage(info, 'map')
     LXDriver.container_start(container, info)
 end
+
+container.config.update('user.xml' => xml)
+container.update
 
 LXDriver.vnc(info)
 LXDriver.log_end(t0)
