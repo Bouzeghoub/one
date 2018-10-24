@@ -115,10 +115,12 @@ module LXDriver
             pass = ''
             pass = "-passwd #{data['PASSWD']}" if data['PASSWD']
 
+            app = 'svncterm'
+
             # TODO: load command from template?
             command = 'bash'
             command = "lxc exec #{info.vm_name} #{command}"
-            command = "svncterm -timeout 0 #{pass} -rfbport #{data['PORT']} -c #{command}"
+            command = "#{app} -timeout 0 #{pass} -rfbport #{data['PORT']} -c #{command}"
 
             command = <<EOT
 status='RUNNING'
