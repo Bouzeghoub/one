@@ -103,8 +103,6 @@ module LXDriver
             end
         end
 
-        # TODO: discuss vncterm
-        # TODO: vnc lost on reboot
         def vnc(info)
             data = nil
             begin
@@ -114,16 +112,25 @@ module LXDriver
             end
             return if data['TYPE'] != 'VNC'
 
-            pass = data['PASSWD'] # mandatory on vncterm
+            pass = ''
+            pass = "-passwd #{data['PASSWD']}" if data['PASSWD']
 
-            # command = single_element('LXD_VNC_COMMAND')
+            # TODO: load command from template?
             command = 'bash'
             command = "lxc exec #{info.vm_name} #{command}"
+            command = "svncterm -timeout 0 #{pass} -rfbport #{data['PORT']} -c #{command}"
 
-            # TODO: Runc vnc command with a wrapper (semi-infinite loop)
-            vnc_client = "vncterm -timeout 0 -passwd #{pass} -rfbport #{data['PORT']} -c #{command}"
+            command = <<EOT
+status='RUNNING'
+while test $status = 'RUNNING'
+do
+	#{command}
+    status=$(lxc list #{info.vm_name} --format csv -c s)
+done
+EOT
+            command
 
-            Process.detach(spawn(vnc_client))
+            Process.detach(spawn(command))
         end
 
         ###############
