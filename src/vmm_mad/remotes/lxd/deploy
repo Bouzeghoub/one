@@ -28,14 +28,13 @@ xml = STDIN.read
 info = LXDriver::XML.new(xml)
 client = LXDClient.new
 
-container = nil
+yaml = LXDriver::YAML.new(info)
+container = Container.new(yaml, client)
+LXDriver.container_create(container, client)
+
 if info.wild
-    container = Container.get(info.vm_name, client)
     container.start
 else
-    yaml = LXDriver::YAML.new(info)
-    container = Container.new(yaml, client)
-    LXDriver.container_create(container, client)
     LXDriver.container_storage(info, 'map')
     LXDriver.container_start(container, info)
 end

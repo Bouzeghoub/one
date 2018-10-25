@@ -311,7 +311,7 @@ module LXDriver
             xml.cpu(self['config'])
             xml.extra(self['config'])
             xml.network(self['devices'])
-            xml.storage(self['devices'])
+            xml.storage(self['devices']) unless xml.wild
         end
 
     end
