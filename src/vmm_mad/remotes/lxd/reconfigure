@@ -25,14 +25,16 @@ vm_name = ARGV[0]
 iso_path = ARGV[2]
 vm_id = ARGV[3]
 
-info = LXDriver.action_xml
+if iso_path != ''
+    info = LXDriver.action_xml
 
-client = LXDClient.new
-container = Container.get(vm_name, client)
+    client = LXDClient.new
+    container = Container.get(vm_name, client)
 
-context_hash = info.context
-LXDriver.context(context_hash['context']['source'], 'map')
-container.devices.update(context_hash)
-container.update
+    context_hash = info.context
+    LXDriver.context(context_hash['context']['source'], 'map')
+    container.devices.update(context_hash)
+    container.update
+end
 
 LXDriver.log_end(t0)

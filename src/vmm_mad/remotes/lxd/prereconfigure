@@ -27,9 +27,12 @@ vm_id = ARGV[2]
 client = LXDClient.new
 container = Container.get(vm_name, client)
 
-mountpoint = container.devices.delete('context')['source']
-container.update
-# TODO: iso loop doesn't unmount in first nic_attach
-LXDriver.context(mountpoint, 'unmap')
+if container.devices.include?('context')
+    mountpoint = container.devices.delete('context')['source']
+    container.update
+
+    # TODO: iso loop doesn't unmount in first nic_attach
+    LXDriver.context(mountpoint, 'unmap')
+end
 
 LXDriver.log_end(t0)
