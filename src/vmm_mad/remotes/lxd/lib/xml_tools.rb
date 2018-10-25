@@ -211,8 +211,29 @@ module LXDriver
         # TODO: TOTAL_IOPS_SEC
         def disk_io(info)
             lxdl = %w[limits.read limits.write limits.max]
-            onel = %w[READ_BYTES_SEC WRITE_BYTES_SEC TOTAL_BYTES_SEC]
-            io(lxdl, onel, info)
+            bytes = %w[READ_BYTES_SEC WRITE_BYTES_SEC TOTAL_BYTES_SEC]
+            iops = %w[READ_IOPS_SEC WRITE_IOPS_SEC TOTAL_IOPS_SEC]
+
+            detect_limit = lambda {|unit|
+                limits = io(lxdl, unit, info)
+                limits.each_key do |key|
+                    return limits if key.include?('limit')
+                end
+
+                false
+            }
+
+            hash = detect_limit.call(bytes)
+            return hash if hash
+
+            hash = detect_limit.call(iops)
+            return {} unless hash
+
+            hash.each_value do |val|
+                val.insert(-1, 'iops')
+            end
+
+            hash
         end
 
         ###############
