@@ -101,6 +101,39 @@ public:
      */
     void to_xml_short(std::ostringstream& oss) const;
 
+    /**
+     * Check is a nic is alias or not
+     */
+    bool is_alias() const
+    {
+        return name() == "NIC_ALIAS";
+    }
+
+    /*
+     * Set nic NAME attribute
+     */
+    void set_nic_name()
+    {
+        // Add NIC name if it's empty NAME = NIC${NIC_ID}
+        if (vector_value("NAME").empty())
+        {
+            replace("NAME", "NIC" + std::to_string(get_nic_id()));
+        }
+    }
+
+    /*
+     * Set nic alias NAME attribute
+     */
+    void set_nic_alias_name(int alias_id)
+    {
+        // Add NIC_ALIAS name if it's empty NAME = NIC${NIC_ID}_ALIAS${ALIAS_ID}
+        if (vector_value("NAME").empty())
+        {
+            replace("NAME", "NIC" + std::to_string(alias_id) + "_" +
+                    + "ALIAS" + std::to_string(get_nic_id()));
+        }
+    }
+
 private:
     /**
      *  Fills the authorization request for this NIC based on the VNET and SG
@@ -133,10 +166,13 @@ public:
         VirtualMachineAttributeSet(false)
     {
         std::vector<VectorAttribute *> vas;
+        std::vector<VectorAttribute *> alias;
         std::vector<VectorAttribute *> pcis;
         std::vector<VectorAttribute *>::iterator it;
 
         tmpl->get(NIC_NAME, vas);
+
+        tmpl->get(NIC_ALIAS_NAME, alias);
 
         tmpl->get("PCI", pcis);
 
@@ -146,6 +182,11 @@ public:
             {
                 vas.push_back(*it);
             }
+        }
+
+        for ( it=alias.begin(); it != alias.end(); ++it)
+        {
+            vas.push_back(*it);
         }
 
         init(vas, false);
@@ -323,6 +364,8 @@ protected:
 
 private:
     static const char * NIC_NAME; //"NIC"
+
+    static const char * NIC_ALIAS_NAME; //"NIC_ALIAS"
 
     static const char * NIC_ID_NAME; //"NIC_ID"
 };

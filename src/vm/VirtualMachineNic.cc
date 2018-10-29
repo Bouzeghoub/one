@@ -236,6 +236,8 @@ void VirtualMachineNic::to_xml_short(std::ostringstream& oss) const
 
 const char * VirtualMachineNics::NIC_NAME = "NIC";
 
+const char * VirtualMachineNics::NIC_ALIAS_NAME = "NIC_ALIAS";
+
 const char * VirtualMachineNics::NIC_ID_NAME = "NIC_ID";
 
 /* -------------------------------------------------------------------------- */
@@ -252,41 +254,125 @@ int VirtualMachineNics::get_network_leases(int vm_id, int uid,
 
     set<int> sg_ids;
 
-    vector<Attribute*>::iterator it;
+    vector<Attribute*>::iterator it, it_a;
     int nic_id;
+
+    VectorAttribute *nics_ids = new VectorAttribute("NICS_IDS");
+    VectorAttribute *alias_idx = new VectorAttribute("ALIAS_IDX");
+    vector<Attribute *> alias_nics;
 
     /* ---------------------------------------------------------------------- */
     /* Get the interface network information                                  */
     /* ---------------------------------------------------------------------- */
-    for (it=nics.begin(), nic_id=0 ; it != nics.end() ; ++it, ++nic_id)
+    for (it=nics.begin(), nic_id=0 ; it != nics.end() ; ++it)
+    {
+        VectorAttribute * vnic  = static_cast<VectorAttribute *>(*it);
+        std::string net_mode = vnic->vector_value("NETWORK_MODE");
+        one_util::toupper(net_mode);
+
+        if (vnic->name() == "NIC")
+        {
+            VirtualMachineNic * nic = new VirtualMachineNic(vnic, nic_id);
+
+            if (net_mode != "AUTO"  )
+            {
+                if ( nic_default != 0 )
+                {
+                    nic->merge(nic_default, false);
+                }
+
+                if ( vnpool->nic_attribute(PoolObjectSQL::VM, nic, nic_id, uid,
+                        vm_id, error_str) == -1 )
+                {
+                    return -1;
+                }
+
+                nic->get_security_groups(sg_ids);
+                nic->set_nic_name();
+                nics_ids->replace(nic->vector_value("NAME"), nic_id);
+                alias_idx->replace(nic->vector_value("NAME"), 0);
+            }
+            else
+            {
+                nic->replace("NIC_ID", nic_id);
+            }
+
+            nic_id ++;
+
+            add_attribute(nic, nic->get_nic_id());
+        }
+        else if (vnic->name() == "NIC_ALIAS" && net_mode == "AUTO")
+        {
+            error_str = "Alias is incompatible with auto mode";
+
+            return -1;
+        }
+        else
+        {
+            alias_nics.push_back(vnic);
+        }
+    }
+
+    for (it=alias_nics.begin(); it != alias_nics.end() ; ++it)
     {
         VectorAttribute * vnic  = static_cast<VectorAttribute *>(*it);
         VirtualMachineNic * nic = new VirtualMachineNic(vnic, nic_id);
 
-        std::string net_mode = vnic->vector_value("NETWORK_MODE");
-        one_util::toupper(net_mode);
+        string alias = vnic->vector_value("PARENT");
+        int alias_id, nic_idx;
 
-        if (net_mode != "AUTO"  )
+        if (nics_ids->vector_value(alias, alias_id) == -1)
         {
-            if ( nic_default != 0 )
-            {
-                nic->merge(nic_default, false);
-            }
+            error_str = "Alias " + alias + " not found";
 
-            if ( vnpool->nic_attribute(PoolObjectSQL::VM, nic, nic_id, uid,
-                    vm_id, error_str) == -1 )
-            {
-                return -1;
-            }
-
-            nic->get_security_groups(sg_ids);
-        }
-        else
-        {
-            nic->replace("NIC_ID", nic_id);
+            return -1;
         }
 
-        add_attribute(nic, nic->get_nic_id());
+        alias_idx->vector_value(alias, nic_idx);
+        alias_idx->replace(alias, nic_idx + 1);
+
+        nic->replace("ALIAS_NIC", alias_id);
+
+        if (nic->vector_value("ALIAS_IDX").empty())
+        {
+            nic->replace("ALIAS_IDX", nic_idx);
+        }
+
+        nic->replace("NIC_ID", nic_id);
+
+        if ( vnpool->nic_attribute(PoolObjectSQL::VM, nic, nic_id, uid,
+                vm_id, error_str) == -1 )
+        {
+            return -1;
+        }
+
+        nic->set_nic_alias_name(alias_id);
+
+        nic_id ++;
+    }
+
+    for (it=nics.begin(); it != nics.end() ; ++it)
+    {
+        VectorAttribute * vnic  = static_cast<VectorAttribute *>(*it);
+        string nic_id = vnic->vector_value("NIC_ID");
+        VirtualMachineNic * nic = new VirtualMachineNic(vnic, std::stoi(nic_id));
+
+        if (!nic->is_alias())
+        {
+            string alias_ids = "";
+
+            for (it_a=alias_nics.begin(); it_a != alias_nics.end(); ++it_a)
+            {
+                VectorAttribute * vnic  = static_cast<VectorAttribute *>(*it_a);
+
+                if (vnic->vector_value("ALIAS_NIC") == nic_id)
+                {
+                    alias_ids += vnic->vector_value("NIC_ID") + ",";
+                }
+            }
+
+            nic->replace("ALIAS_IDS", alias_ids);
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -400,6 +486,41 @@ int VirtualMachineNics::set_up_attach_nic(int vmid, int uid, int cluster_id,
 
     VirtualMachineNic * nic = new VirtualMachineNic(vnic, max_nic_id + 1);
 
+    if ( nic->is_alias() )
+    {
+        bool find = false;
+        int alias_id, alias_idx;
+        string alias_ids;
+
+        for(nic_iterator it = begin(); it != end() ; ++it)
+        {
+            if ( (*it)->vector_value("NAME") == nic->vector_value("PARENT") )
+            {
+                find = true;
+                alias_id = (*it)->get_nic_id();
+                (*it)->vector_value("ALIAS_IDS", alias_ids);
+                alias_idx = one_util::split(alias_ids, ',').size();
+                alias_ids = alias_ids + std::to_string(max_nic_id + 1) + ',';
+                (*it)->replace("ALIAS_IDS", alias_ids);
+                break;
+            }
+        }
+
+        if ( !find )
+        {
+            error_str = "Alias not found.";
+            return -1;
+        }
+
+        nic->set_nic_alias_name(alias_id);
+        nic->replace("ALIAS_NIC", alias_id);
+        nic->replace("ALIAS_IDX", alias_idx + 1);
+    }
+    else
+    {
+        nic->set_nic_name();
+    }
+
     if ( nic_default != 0 )
     {
         nic->merge(nic_default, false);
@@ -450,18 +571,21 @@ int VirtualMachineNics::set_up_attach_nic(int vmid, int uid, int cluster_id,
     // -------------------------------------------------------------------------
     // Get security groups for the new nic
     // -------------------------------------------------------------------------
-    set<int> nic_sgs, vm_sgs;
-
-    get_security_groups(vm_sgs);
-
-    nic->get_security_groups(nic_sgs);
-
-    for (set<int>::iterator it = vm_sgs.begin(); it != vm_sgs.end(); ++it)
+    if ( !nic->is_alias() )
     {
-        nic_sgs.erase(*it);
-    }
+        set<int> nic_sgs, vm_sgs;
 
-    sgpool->get_security_group_rules(vmid, nic_sgs, sgs);
+        get_security_groups(vm_sgs);
+
+        nic->get_security_groups(nic_sgs);
+
+        for (set<int>::iterator it = vm_sgs.begin(); it != vm_sgs.end(); ++it)
+        {
+            nic_sgs.erase(*it);
+        }
+
+        sgpool->get_security_group_rules(vmid, nic_sgs, sgs);
+    }
 
     // -------------------------------------------------------------------------
     // Add the nic to the set

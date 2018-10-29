@@ -2374,7 +2374,7 @@ int VirtualMachine::from_xml(const string &xml_str)
     }
     rc += obj_template->from_xml_node(content[0]);
 
-    vector<VectorAttribute *> vdisks, vnics, pcis;
+    vector<VectorAttribute *> vdisks, vnics, alias, pcis;
     vector<VectorAttribute *>::iterator it;
 
     obj_template->get("DISK", vdisks);
@@ -2382,6 +2382,8 @@ int VirtualMachine::from_xml(const string &xml_str)
     disks.init(vdisks, true);
 
     obj_template->get("NIC", vnics);
+
+    obj_template->get("NIC_ALIAS", alias);
 
     obj_template->get("PCI", pcis);
 
@@ -2391,6 +2393,11 @@ int VirtualMachine::from_xml(const string &xml_str)
         {
             vnics.push_back(*it);
         }
+    }
+
+    for (it =alias.begin(); it != alias.end(); ++it)
+    {
+        vnics.push_back(*it);
     }
 
     nics.init(vnics, true);
@@ -3264,9 +3271,11 @@ int VirtualMachine::get_network_leases(string& estr)
     /* ---------------------------------------------------------------------- */
     /* Get the NIC attributes:                                                */
     /*   * NIC                                                                */
+    /*   * NIC_ALIAS                                                          */
     /*   * PCI + TYPE = NIC                                                   */
     /* ---------------------------------------------------------------------- */
     vector<Attribute *> anics;
+    vector<Attribute *> alias;
 
     user_obj_template->remove("NIC", anics);
 
@@ -3280,6 +3289,23 @@ int VirtualMachine::get_network_leases(string& estr)
         else
         {
             obj_template->set(*it);
+            ++it;
+        }
+    }
+
+    user_obj_template->remove("NIC_ALIAS", alias);
+
+    for (vector<Attribute*>::iterator it = alias.begin(); it != alias.end(); )
+    {
+        if ( (*it)->type() != Attribute::VECTOR )
+        {
+            delete *it;
+            it = alias.erase(it);
+        }
+        else
+        {
+            obj_template->set(*it);
+            anics.push_back(*it);
             ++it;
         }
     }
@@ -3330,8 +3356,13 @@ int VirtualMachine::set_up_attach_nic(VirtualMachineTemplate * tmpl, string& err
 
     if ( new_nic == 0 )
     {
-        err = "Wrong format or missing NIC attribute";
-        return -1;
+        new_nic = tmpl->get("NIC_ALIAS");
+
+        if ( new_nic == 0 )
+        {
+            err = "Wrong format or missing NIC/NIC_ALIAS attribute";
+            return -1;
+        }
     }
 
     new_nic = new_nic->clone();
@@ -3364,6 +3395,7 @@ int VirtualMachine::set_up_attach_nic(VirtualMachineTemplate * tmpl, string& err
         obj_template->set(*it);
     }
 
+
     return 0;
 }
 
@@ -3381,7 +3413,38 @@ int VirtualMachine::set_detach_nic(int nic_id)
 
     nic->set_attach();
 
-    clear_nic_context(nic_id);
+    if ( !nic->is_alias() )
+    {
+        clear_nic_context(nic_id);
+
+        vector<string> alias_ids = one_util::split(nic->vector_value("ALIAS_IDS"), ',', true);
+
+        for(vector<string>::iterator it = alias_ids.begin(); it != alias_ids.end(); it++)
+        {
+            VirtualMachineNic *alias = nics.get_nic(std::stoi(*it));
+            clear_nic_alias_context(nic_id, std::stoi(alias->vector_value("ALIAS_IDX")));
+        }
+    }
+    else
+    {
+        clear_nic_alias_context(std::stoi(nic->vector_value("ALIAS_NIC")),
+                                std::stoi(nic->vector_value("ALIAS_IDX")));
+
+        nic = nics.get_nic(std::stoi(nic->vector_value("ALIAS_NIC")));
+
+        vector<string> alias_ids = one_util::split(nic->vector_value("ALIAS_IDS"), ',', true);
+        string alias = "";
+
+        for(vector<string>::iterator it=alias_ids.begin(); it!=alias_ids.end(); ++it)
+        {
+            if (std::stoi(*it) != nic_id)
+            {
+                alias += *it + ",";
+            }
+        }
+
+        nic->replace("ALIAS_IDS", alias);
+    }
 
     return 0;
 }

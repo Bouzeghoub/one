@@ -279,6 +279,8 @@ int LibVirtDriver::deployment_description_kvm(
     string  o_peak_bw = "";
     string  o_peak_kb = "";
 
+    string  alias = "";
+
     string  default_filter = "";
     string  default_model  = "";
 
@@ -1048,6 +1050,12 @@ int LibVirtDriver::deployment_description_kvm(
         o_avg_bw  = nic[i]->vector_value("OUTBOUND_AVG_BW");
         o_peak_bw = nic[i]->vector_value("OUTBOUND_PEAK_BW");
         o_peak_kb = nic[i]->vector_value("OUTBOUND_PEAK_KB");
+
+
+        if ( nic[i]->name() == "NIC_ALIAS" )
+        {
+            continue;
+        }
 
         if ( bridge.empty() )
         {

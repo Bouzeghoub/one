@@ -1144,11 +1144,20 @@ void VirtualMachinePool::delete_hotplug_nic(int vid, bool attach)
         }
     }
 
+    vector<string> alias_ids = one_util::split(nic->vector_value("ALIAS_IDS"), ',', true);
+
+    for(vector<string>::iterator it = alias_ids.begin(); it != alias_ids.end(); it++)
+    {
+        vm->get_nic(std::stoi(*it))->release_network_leases(oid);
+    }
+
+    nic->release_network_leases(oid);
+
+    vm->delete_attach_alias(nic);
+
     update(vm);
 
     vm->unlock();
-
-    nic->release_network_leases(oid);
 
     tmpl.set(nic->vector_attribute());
 

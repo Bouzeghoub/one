@@ -1439,6 +1439,19 @@ public:
         return nic;
     }
 
+    /**
+     * Deletes the alias of the NIC that was in the process of being attached/detached
+     */
+    void delete_attach_alias(VirtualMachineNic *nic)
+    {
+        vector<string> alias_ids = one_util::split(nic->vector_value("ALIAS_IDS"), ',', true);
+
+        for(vector<string>::iterator it = alias_ids.begin(); it != alias_ids.end(); it++)
+        {
+            obj_template->remove(get_nic(std::stoi(*it))->vector_attribute());
+        }
+    }
+
     // ------------------------------------------------------------------------
     // Disk Snapshot related functions
     // ------------------------------------------------------------------------
@@ -1985,6 +1998,14 @@ private:
      *    @param nicid the id of the NIC
      */
     void clear_nic_context(int nicid);
+
+    /**
+     *  Deletes the NETWORK ALIAS related CONTEXT section for the given nic, i.e.
+     *  ETH_<id>_ALIAS<aliasid>
+     *    @param nicid the id of the NIC
+     *    @param aliasid the idx of the ALIAS
+     */
+    void clear_nic_alias_context(int nicid, int aliasidx);
 
     /**
      *  Generate the PCI related CONTEXT setions, i.e. PCI_*. This function
