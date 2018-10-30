@@ -48,7 +48,7 @@ class RBD < Mapper
     end
 
     def get_parts(block)
-        parts = super(block)
+        parts = detect_parts(block)
         parts.each do |part|
             part['name'].slice!('//dev')
         end
