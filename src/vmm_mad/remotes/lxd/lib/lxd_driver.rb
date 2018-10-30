@@ -40,7 +40,7 @@ require 'opennebula' # TODO: Check if works on node-only VM
 module LXDriver
 
     SEP = '-' * 40
-    CONTAINERS = '/var/lib/lxd/containers/' # TODO: Fix hardcode
+    CONTAINERS = '/var/lib/lxd/storage-pools/default/containers' # TODO: Fix hardcode
 
     class << self
 
@@ -71,7 +71,7 @@ module LXDriver
             File.open(path, 'w') {|file| file.write(xml) }
         end
 
-        # Returns a mapper class depending on the driver string
+        # Returns a mapper object depending on the driver string
         def select_driver(info)
             case info['TYPE']
             when 'FILE'
@@ -103,38 +103,6 @@ module LXDriver
             end
         end
 
-        def vnc(info)
-            data = nil
-            begin
-                data = info.complex_element('GRAPHICS')
-            rescue StandardError => exception
-                return
-            end
-            return if data['TYPE'] != 'VNC'
-
-            pass = ''
-            pass = "-passwd #{data['PASSWD']}" if data['PASSWD']
-
-            app = 'svncterm'
-
-            # TODO: load command from template?
-            command = 'bash'
-            command = "lxc exec #{info.vm_name} #{command}"
-            command = "#{app} -timeout 0 #{pass} -rfbport #{data['PORT']} -c #{command}"
-
-            command = <<EOT
-status='RUNNING'
-while test $status = 'RUNNING'
-do
-	#{command}
-    status=$(lxc list #{info.vm_name} --format csv -c s)
-done
-EOT
-            command
-
-            Process.detach(spawn(command))
-        end
-
         ###############
         #  Container  #
         ###############
@@ -155,7 +123,7 @@ EOT
                 disk_id = disk_info['DISK_ID']
 
                 mountpoint = device_path(info, disk_info, 'mapper/')
-                mountpoint = CONTAINERS + 'one-' + info.vm_id if disk_id == info.rootfs_id
+                mountpoint = "#{CONTAINERS}/#{info.vm_name}/rootfs" if disk_id == info.rootfs_id
 
                 device = device_path(info, disk_info)
 
@@ -192,6 +160,38 @@ EOT
             else
                 container.create
             end
+        end
+
+        def vnc(info)
+            data = nil
+            begin
+                data = info.complex_element('GRAPHICS')
+            rescue StandardError => exception
+                return
+            end
+            return if data['TYPE'] != 'VNC'
+
+            pass = ''
+            pass = "-passwd #{data['PASSWD']}" if data['PASSWD']
+
+            app = 'svncterm'
+
+            # TODO: load command from template?
+            command = 'bash'
+            command = "lxc exec #{info.vm_name} #{command}"
+            command = "#{app} -timeout 0 #{pass} -rfbport #{data['PORT']} -c #{command}"
+
+            command = <<EOT
+status='RUNNING'
+while test $status = 'RUNNING'
+do
+	#{command}
+    status=$(lxc list #{info.vm_name} --format csv -c s)
+done
+EOT
+            command
+
+            Process.detach(spawn(command))
         end
 
     end
