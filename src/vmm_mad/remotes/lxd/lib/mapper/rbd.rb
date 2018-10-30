@@ -33,4 +33,26 @@ class RBD < Mapper
         shell("sudo rbd --id #{@ceph_user} unmap #{block}")
     end
 
+    # Returns an array of mountable block's partitions
+    def detect_parts(block)
+        parts = `blkid | grep #{block} | grep -w UUID | awk {'print $1'}`.split(":\n")
+        uuids = []
+        parts.each {|part| uuids.append `blkid #{part} -o export | grep -w UUID`.chomp("\n")[5..-1] }
+
+        formatted = []
+        0.upto parts.length - 1 do |i|
+            formatted[i] = { 'name' => parts[i], 'uuid' => uuids[i] }
+        end
+
+        formatted
+    end
+
+    def get_parts(block)
+        parts = super(block)
+        parts.each do |part|
+            part['name'].slice!('//dev')
+        end
+        parts
+    end
+
 end

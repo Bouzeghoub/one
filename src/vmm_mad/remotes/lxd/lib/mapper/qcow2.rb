@@ -31,6 +31,15 @@ class QCOW2 < Mapper
         shell("sudo qemu-nbd -d #{block}")
     end
 
+    def detect_parts(block)
+        parts = [{ :fstype => nil }]
+        while parts[0]['fstype'].nil?
+            sleep 0.1
+            parts = super(block)
+        end
+        parts
+    end
+
     # Returns the first valid nbd block in which to map the qcow2 disk
     def block
         nbds = `lsblk -l | grep nbd | awk '{print $1}'`.split("\n")

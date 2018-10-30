@@ -71,14 +71,15 @@ class Mapper
         mounts
     end
 
+    def detect_parts(block)
+        command = `lsblk #{block} -f -J`
+        JSON.parse(command)['blockdevices'][0]['children']
+    end
+
     # Returns an array of mountable block's partitions
     def get_parts(block)
-        parts = [{ :fstype => nil }]
-        while parts[0]['fstype'].nil?
-            sleep 0.1
-            command = `lsblk #{block} -f -J`
-            parts = JSON.parse(command)['blockdevices'][0]['children']
-        end
+        parts = detect_parts(block)
+        return block if parts.nil?
 
         parts.each {|part| parts.delete(part) if part['uuid'].nil? || part['fstype'] == 'swap' }
         parts.each {|part| part['name'].insert(0, '/dev/') }
