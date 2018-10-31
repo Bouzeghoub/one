@@ -26,12 +26,20 @@ class RAW < Mapper
     end
 
     def unmap(block)
+        hide_parts(block)
         shell("sudo losetup -d #{block}")
     end
 
-    # Return an array of partitions of block if they exist
+    def detect_parts(block)
+        kpartx('av', block)
+    end
+
+    def hide_parts(block)
+        kpartx('dv', block)
+    end
+
     def get_parts(block)
-        return block if `sudo kpartx -av #{block}` == ''
+        return block if detect_parts(block) == ''
 
         parts = super(block)
         parts.each do |part|
@@ -42,13 +50,16 @@ class RAW < Mapper
         parts
     end
 
-    def hide_parts(block)
-        shell("sudo kpartx -dv #{block}")
-    end
-
     def get_parent_device(partition)
         partition.slice!('/mapper')
         super(partition)
+    end
+
+    private
+
+    # kpartx command with flags and device interface
+    def kpartx(flags, block)
+        `sudo kpartx -#{flags} #{block}`
     end
 
 end

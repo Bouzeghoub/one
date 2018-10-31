@@ -40,6 +40,8 @@ class QCOW2 < Mapper
         parts
     end
 
+    private
+
     # Returns the first valid nbd block in which to map the qcow2 disk
     def block
         nbds = `lsblk -l | grep nbd | awk '{print $1}'`.split("\n")

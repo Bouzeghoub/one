@@ -28,16 +28,25 @@ class Mapper
     FILTER = /\d+p\d+\b/
     TMP_FSTAB = '/tmp/one-fstab'
 
+    # TODO: validate mounts with unmaps
     def mount(block, path)
         shell("sudo mount #{block} #{path} 2>/dev/null")
+    rescue StandardError
+        if partition?(block)
+            raise "cannot mount partition #{block}"
+        end
+
+        parts = get_parts(block)
+
+        if parts == block
+            unmap(block)
+            raise "cannot mount device #{block}"
+        end
+        parts
     end
 
     def umount(path)
         shell("sudo umount #{path}")
-    end
-
-    def format(block, file_system)
-        shell("sudo mkfs.#{file_system} #{block}")
     end
 
     # Returns the block device associated to a mount
@@ -45,13 +54,20 @@ class Mapper
         `sudo df -h #{path} | grep /dev | awk '{print $1}'`.chomp("\n")
     end
 
+    # TODO: mount fstab on container rootfs
+    # TODO: seize root part on container rootfs, multimap dir
     def detect_fstab(partition)
         FileUtils.mkdir_p TMP_FSTAB
         mount(partition, TMP_FSTAB)
 
         fstab = false
         path = TMP_FSTAB + '/etc/fstab'
-        fstab = Fstab.new(path) if File.file?(path)
+        begin
+            fstab = Fstab.new(path) if File.file?(path)
+        rescue StandardError => exception
+            umount(TMP_FSTAB) # TODO: improve dup umount
+            raise exception
+        end
         umount(TMP_FSTAB)
         fstab
     end
@@ -71,12 +87,16 @@ class Mapper
         mounts
     end
 
+    # TODO: sort partitions based on '/' count
+    def sort_parts(parts, order); end
+
+    # Return an array of possibly unmountable partitions from block
     def detect_parts(block)
         command = `lsblk #{block} -f -J`
         JSON.parse(command)['blockdevices'][0]['children']
     end
 
-    # Returns an array of mountable block's partitions
+    # Returns an array of mountable partitions from block
     def get_parts(block)
         parts = detect_parts(block)
         return block if parts.nil?
@@ -94,19 +114,15 @@ class Mapper
         partition.insert(-1, device_id)
     end
 
-    def multimap(device, directory)
-        parts = get_parts(device)
-        # TODO: improve error detection
-        raise "cannot mount #{device}" if parts == device
-
+    def multimap(partitions, directory)
         fstab = nil
-        parts.each do |part|
+        partitions.each do |part|
             fstab = detect_fstab(part['name'])
             break fstab if fstab
         end
 
         # TODO: ensure correct mount order counting / instances
-        mounts = parse_fstab(fstab, parts)
+        mounts = parse_fstab(fstab, partitions)
         mounts.each do |part, dest|
             mount(part, directory + dest)
         end
@@ -116,7 +132,7 @@ class Mapper
         get_parent_device(device) # part becomes dev
         parts = get_parts(device)
 
-        `sudo cp #{directory}/etc/fstab #{TMP_FSTAB}`
+        cp("#{directory}/etc/fstab", TMP_FSTAB, 'sudo')
         fstab = Fstab.new("#{TMP_FSTAB}/fstab")
 
         mounts = parse_fstab(fstab, parts)
@@ -125,7 +141,6 @@ class Mapper
             umount(part)
         end
 
-        hide_parts(device) if self.class == RAW # TODO: improve
         unmap(device)
     end
 
@@ -133,20 +148,18 @@ class Mapper
     def run(action, directory, disk = nil)
         case action
         when 'map'
-            begin
-                FileUtils.mkdir_p directory
-            rescue StandardError
-                `sudo mkdir -p #{directory}`
-            end
             device = map(disk)
-            begin
-                mount(device, directory)
-            rescue StandardError
-                multimap(device, directory)
-            end
+            mkdir(directory)
+
+            parts = mount(device, directory)
+            multimap(parts, directory) if parts.class == Array
         when 'unmap'
             device = detect(directory)
-            if FILTER.match? device
+            if device == ''
+                STDERR.puts "#{directory} has no associated device"
+                return
+            end
+            if partition?(device)
                 multiunmap(device, directory)
             else
                 umount(directory)
@@ -155,17 +168,24 @@ class Mapper
         end
     end
 
-    # TODO: sort partitions based on '/' count
-    # def sort_parts(parts, order)
-    #     count_root = lambda {
-    #         parts
-    #     }
-    #     case order
-    #     when 'mount'
-    #     when 'umount'
+    def cp(src, dst, sudo = '')
+        sudo = 'sudo' if sudo != ''
+        `#{sudo} cp #{src} #{dst}`
+    end
 
-    #     end
-    # end
+    def mkdir(directory)
+        FileUtils.mkdir_p directory
+    rescue StandardError
+        `sudo mkdir -p #{directory}`
+    end
+
+    def partition?(device)
+        FILTER.match? device
+    end
+
+    def format(block, file_system)
+        shell("sudo mkfs.#{file_system} #{block}")
+    end
 
     def shell(command)
         raise 'command failed to execute' unless system(command)
