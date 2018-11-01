@@ -33,7 +33,7 @@ require 'mapper/raw'
 require 'mapper/qcow2'
 require 'mapper/rbd'
 
-require 'scripts_common' # TODO: Check if works on node-only VM
+require '../../../scripts_common' # TODO: Check if works on node-only VM
 require 'opennebula' # TODO: Check if works on node-only VM
 
 # Tools required by the vmm scripts
