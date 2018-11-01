@@ -16,7 +16,9 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-require_relative 'mapper'
+$LOAD_PATH.unshift File.dirname(__FILE__)
+
+require 'mapper'
 
 # Mapping RAW disks
 class RAW < Mapper

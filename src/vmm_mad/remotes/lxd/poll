@@ -16,8 +16,10 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-require_relative 'lib/rest/container'
-require_relative 'lib/rest/client'
+$LOAD_PATH.unshift File.dirname(__FILE__)
+
+require 'container'
+require 'client'
 require_relative '../lib/poll_common'
 
 require 'base64'
@@ -215,7 +217,7 @@ module LXD
         def yaml_to_one(container)
             name = container.name
             arch = container.info['architecture']
-            capacity = container.config_expanded
+            capacity = container.expanded_config
             cpu = capacity['limits.cpu.allowance'].chomp('%').to_f / 100
             vcpu = capacity['limits.cpu']
             memory = parse_memory(capacity['limits.memory'])

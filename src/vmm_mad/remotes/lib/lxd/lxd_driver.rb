@@ -24,16 +24,16 @@ else
 end
 [RUBY_LIB_LOCATION, __dir__].each {|dir| $LOAD_PATH << dir }
 
-require 'rest/container'
-require 'rest/client'
+require 'container'
+require 'client'
 
 require 'xml_tools'
 
-require 'mapper/raw'
-require 'mapper/qcow2'
-require 'mapper/rbd'
+require 'raw'
+require 'qcow2'
+require 'rbd'
 
-require '../../../scripts_common' # TODO: Check if works on node-only VM
+require_relative '../../scripts_common' 
 require 'opennebula' # TODO: Check if works on node-only VM
 
 # Tools required by the vmm scripts

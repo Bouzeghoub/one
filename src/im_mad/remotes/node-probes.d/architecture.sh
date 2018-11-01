@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/bin/sh
 
 # -------------------------------------------------------------------------- #
 # Copyright 2002-2018, OpenNebula Project, OpenNebula Systems                #
@@ -16,43 +16,4 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-require_relative 'mapper'
-
-# Ceph RBD mapper
-class RBD < Mapper
-
-    def initialize(ceph_user)
-        @ceph_user = ceph_user
-    end
-
-    def map(image)
-        `sudo rbd --id #{@ceph_user} map #{image}`.chomp
-    end
-
-    def unmap(block)
-        shell("sudo rbd --id #{@ceph_user} unmap #{block}")
-    end
-
-    # Returns an array of mountable block's partitions
-    def detect_parts(block)
-        parts = `blkid | grep #{block} | grep -w UUID | awk {'print $1'}`.split(":\n")
-        uuids = []
-        parts.each {|part| uuids.append `blkid #{part} -o export | grep -w UUID`.chomp("\n")[5..-1] }
-
-        formatted = []
-        0.upto parts.length - 1 do |i|
-            formatted[i] = { 'name' => parts[i], 'uuid' => uuids[i] }
-        end
-
-        formatted
-    end
-
-    def get_parts(block)
-        parts = detect_parts(block)
-        parts.each do |part|
-            part['name'].slice!('//dev')
-        end
-        parts
-    end
-
-end
+echo ARCH=`uname -m`

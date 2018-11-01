@@ -16,8 +16,10 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+$LOAD_PATH.unshift File.dirname(__FILE__)
+
 t0 = Time.now
-require_relative 'lib/lxd_driver'
+require 'lxd_driver'
 require 'base64'
 
 LXDriver.log_init

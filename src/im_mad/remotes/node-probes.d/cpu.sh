@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/bin/sh
 
 # -------------------------------------------------------------------------- #
 # Copyright 2002-2018, OpenNebula Project, OpenNebula Systems                #
@@ -16,30 +16,20 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-$LOAD_PATH.unshift File.dirname(__FILE__)
+MODEL=''
 
-t0 = Time.now
-require 'lxd_driver'
+if [ -f /proc/cpuinfo ]; then
+    for NAME in 'model name' 'cpu'; do
+        MODEL=$(grep -m1 "^${NAME}[[:space:]]*:" /proc/cpuinfo | \
+            cut -d: -f2 | \
+            sed -e 's/^ *//')
 
-LXDriver.log_init
+        if [ -n "${MODEL}" ]; then
+            break
+        fi
+    done
+fi
 
-vm_name = ARGV[0]
-mac = ARGV[1]
-bridge = ARGV[2]
-model = ARGV[3]
-net_drv = ARGV[4]
-host_nic = ARGV[5]
-vm_id = ARGV[6]
-host = ARGV[7]
-
-info = LXDriver.action_xml
-nics = info.multiple_elements('NIC')
-nic_info = info.device_info(nics, 'NIC', mac)
-
-client = LXDClient.new
-container = Container.get(vm_name, client)
-
-container.devices.update(info.nic(nic_info))
-container.update
-
-LXDriver.log_end(t0)
+if [ -n "${MODEL}" ]; then
+    echo "MODELNAME=\"${MODEL}\""
+fi

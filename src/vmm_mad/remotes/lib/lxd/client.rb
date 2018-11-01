@@ -26,18 +26,20 @@ require 'json'
 #
 class LXDClient
 
-    # TODO: Create a config file for params like socket
+    # API Configuration Attributes
+
+    API    = '/1.0'.freeze
+    HEADER = { 'Host' => 'localhost' }.freeze
+
+    SOCK_PATH = '/var/lib/lxd/unix.socket'
 
     # Enable communication with LXD via unix socket
     begin
-        SOCK = Net::BufferedIO.new(UNIXSocket.new('/var/lib/lxd/unix.socket'))
+        SOCK = Net::BufferedIO.new(UNIXSocket.new(SOCK_PATH))
     rescue StandardError
         STDERR.puts('Could not open LXD socket')
         Process.exit(1)
     end
-
-    API = '/1.0'.freeze
-    HEADER = { 'Host' => 'localhost' }.freeze
 
     # Performs HTTP::Get
     # Params:
@@ -77,9 +79,11 @@ class LXDClient
     # Waits for an operation returned in response to be completed
     def wait(response, timeout)
         operation_id = response['operation'].split('/').last
-        timeout = timeout.to_s if timeout.is_a? Integer
-        timeout = "?timeout=#{timeout}" unless timeout == ''
+
+        timeout = "?timeout=#{timeout}" if timeout
+
         response = get("operations/#{operation_id}/wait#{timeout}")
+
         raise LXDError, response if response['metadata']['status'] == 'Failure'
     end
 
@@ -88,11 +92,14 @@ class LXDClient
     # Returns the HTTPResponse body as a hash
     # Params:
     # +request+:: +Net::HTTP::Request+ made to the http server
-    # +data+:: +string+ for post/put/patch requests that send data to the server (may be nil)
+    # +data+:: +string+ for post/put/patch requests that send data to the server
+    # (may be nil)
 
     def get_response(request, data)
         request.body = JSON.dump(data) unless data.nil?
+
         request.exec(SOCK, '1.1', request.path)
+
         response = nil
 
         loop do
@@ -101,21 +108,21 @@ class LXDClient
         end
 
         response.reading_body(SOCK, request.response_body_permitted?) {}
+
         response = JSON.parse(response.body)
+
         raise LXDError, response if response['type'] == 'error'
 
         response
     end
-
 end
 
 # Error used for raising LXDClient exception when response is error return value
 class LXDError < StandardError
-
     attr_reader :body
+
     def initialize(msg = 'LXD API error')
         @body = msg
         super
     end
-
 end

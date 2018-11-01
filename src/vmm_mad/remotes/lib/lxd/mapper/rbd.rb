@@ -18,28 +18,43 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
+require 'mapper'
 
-LXDriver.log_init
+# Ceph RBD mapper
+class RBD < Mapper
 
-vm_name = ARGV[0]
-mac = ARGV[1]
-bridge = ARGV[2]
-model = ARGV[3]
-net_drv = ARGV[4]
-host_nic = ARGV[5]
-vm_id = ARGV[6]
-host = ARGV[7]
+    def initialize(ceph_user)
+        @ceph_user = ceph_user
+    end
 
-info = LXDriver.action_xml
-nics = info.multiple_elements('NIC')
-nic_info = info.device_info(nics, 'NIC', mac)
+    def map(image)
+        `sudo rbd --id #{@ceph_user} map #{image}`.chomp
+    end
 
-client = LXDClient.new
-container = Container.get(vm_name, client)
+    def unmap(block)
+        shell("sudo rbd --id #{@ceph_user} unmap #{block}")
+    end
 
-container.devices.update(info.nic(nic_info))
-container.update
+    # Returns an array of mountable block's partitions
+    def detect_parts(block)
+        parts = `blkid | grep #{block} | grep -w UUID | awk {'print $1'}`.split(":\n")
+        uuids = []
+        parts.each {|part| uuids.append `blkid #{part} -o export | grep -w UUID`.chomp("\n")[5..-1] }
 
-LXDriver.log_end(t0)
+        formatted = []
+        0.upto parts.length - 1 do |i|
+            formatted[i] = { 'name' => parts[i], 'uuid' => uuids[i] }
+        end
+
+        formatted
+    end
+
+    def get_parts(block)
+        parts = detect_parts(block)
+        parts.each do |part|
+            part['name'].slice!('//dev')
+        end
+        parts
+    end
+
+end

@@ -20,23 +20,29 @@
 # LXD Container abstraction
 #
 class Container
-
-    attr_reader :name, :status, :status_code, :info
-    attr_accessor :devices, :config, :config_expanded, :devices_expanded
-
     CONTAINERS = 'containers'.freeze
+
+    CONTAINER_ATTRIBUTES = %w{name status status_code devices config profile 
+        expanded_config expanded_devices}.freeze
+
+    CONTAINER_ATTRIBUTES.each { |attr|
+        define_method(attr.to_sym) do
+            @info[attr]
+        end
+
+        define_method("#{attr}=".to_sym) do |value|
+            @info[attr] = value
+        end
+    }
 
     # Creates the container object in memory.
     # Can be later created in LXD using create method
     def initialize(info, client)
         @client = client
-        @info = info
-        @name = @info['name']
-        set_attr
+        @info   = info
     end
 
     class << self
-
         # Returns specific container, by its name
         # Params:
         # +name+:: container name
@@ -49,13 +55,14 @@ class Container
 
         # Returns an array of container objects
         def get_all(client)
-            # array of container names
-            container_names = client.get(CONTAINERS)['metadata']
             containers = []
+
+            container_names = client.get(CONTAINERS)['metadata']
             container_names.each do |name|
                 name = name.split('/').last
                 containers.push(get(name, client))
             end
+
             containers
         end
 
@@ -65,32 +72,31 @@ class Container
             true
         rescue LXDError => exception
             raise exception if exception.body['error_code'] != 404
-
             false
         end
-
     end
 
     # Create a container without a base image
     def create(wait: true, timeout: '')
         @info['source'] = { 'type' => 'none' }
         wait?(@client.post(CONTAINERS, @info), wait, timeout)
-        update_local
+        
+        @info = @client.get("#{CONTAINERS}/#{name}")['metadata']
     end
 
     # Delete container
     def delete(wait: true, timeout: '')
-        wait?(@client.delete("#{CONTAINERS}/#{@name}"), wait, timeout)
+        wait?(@client.delete("#{CONTAINERS}/#{name}"), wait, timeout)
     end
 
     # Updates the container in LXD server with the new configuration
     def update(wait: true, timeout: '')
-        wait?(@client.put("#{CONTAINERS}/#{@name}", @info), wait, timeout)
+        wait?(@client.put("#{CONTAINERS}/#{name}", @info), wait, timeout)
     end
 
     # Returns the container current state
     def monitor
-        @client.get("#{CONTAINERS}/#{@name}/state")
+        @client.get("#{CONTAINERS}/#{name}/state")
     end
 
     # Status Control
@@ -116,25 +122,6 @@ class Container
     end
 
     private
-
-    # Updates container attr from @info
-    def set_attr
-        # TODO: make attribures references to @info values
-        @status = @info['status']
-        @status_code = @info['status_code']
-        @profile = @info['profile']
-        @config = @info['config']
-        @config_expanded = info['expanded_config']
-        @devices = @info['devices']
-        @devices_expanded = info['expanded_devices']
-    end
-
-    # Syncs the container in LXD with the container object in memory
-    def update_local
-        @info = @client.get("#{CONTAINERS}/#{@name}")['metadata']
-        set_attr
-    end
-
     # Waits or no for response depending on wait value
     def wait?(response, wait, timeout)
         @client.wait(response, timeout) unless wait == false
@@ -144,10 +131,12 @@ class Container
     # Accepts optional args
     def change_state(action, options)
         options.update(:action => action)
-        response = @client.put("#{CONTAINERS}/#{@name}/state", options)
-        wait?(response, options[:wait], options[:timeout])
-        update_local
-        @status
-    end
 
+        response = @client.put("#{CONTAINERS}/#{name}/state", options)
+        wait?(response, options[:wait], options[:timeout])
+
+        @info = @client.get("#{CONTAINERS}/#{name}")['metadata']
+
+        status
+    end
 end
