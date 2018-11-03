@@ -14,11 +14,11 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-from lex_bison import *
 import os
 import sys
 import shutil
 sys.path.append("./share/scons")
+from lex_bison import *
 
 # This is the absolute path where the project is located
 cwd = os.getcwd()
