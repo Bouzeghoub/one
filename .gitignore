@@ -38,3 +38,5 @@ src/sunstone/public/locale/languages/*.js
 
 share/esx-fw-vnc/*.rpm
 share/esx-fw-vnc/.vagrant*
+
+*.vscode
