@@ -156,7 +156,7 @@ class OpenNebulaVM
 
     # Sets up the storage devices configuration in devices
     def storage(hash)
-        disks = @xml.elements('DISK')
+        disks = @xml.elements('//TEMPLATE/DISK')
 
         disks.each { |n| 
             hash.update(disk(n))
@@ -189,6 +189,7 @@ class OpenNebulaVM
         # Source & Path attributes
         #-----------------------------------------------------------------------
         if disk_id == @rootfs_id
+            disk_name = 'root'
             disk = { 'type' => 'disk', 'path' => '/', 'pool' => 'default' }
         else
             source = "#{@ds_path}/#{@sysds_id}/#{@vm_id}/mapper/disk.#{disk_id}"
@@ -196,6 +197,7 @@ class OpenNebulaVM
             path = info['TARGET']
             path = "/media/#{disk_id}" unless path[0] == '/'
 
+            disk_name = "disk#{disk_id}"
             disk = { 'type' => 'disk', 'source' => source, 'path' => path }
         end
    
@@ -238,7 +240,7 @@ class OpenNebulaVM
             end
         end
 
-        { "disk#{disk_id}" => disk }
+        { disk_name => disk }
     end
 
 	#---------------------------------------------------------------------------

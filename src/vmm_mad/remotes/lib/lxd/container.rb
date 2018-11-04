@@ -239,6 +239,7 @@ class Container
         RAW.new.run('unmap', ctgt, csrc)
     end
 
+    # Attach disk to container (ATTACH = YES) in VM description
     def attach_disk
         return unless @one
 
@@ -257,6 +258,30 @@ class Container
         @lxc['devices'].update(disk_hash)
 
         update
+    end
+
+    # Detach disk to container (ATTACH = YES) in VM description
+    def detach_disk
+        return unless @one
+
+        disk_a = @one.get_disks.select do |disk|
+            disk['ATTACH'].upcase == 'YES'
+        end
+
+        disk_element = disk_a.first
+
+        return unless disk_element
+
+        disk_name = "disk#{disk_element['DISK_ID']}"
+
+        csrc = @lxc['devices'][disk_name]['source'].clone
+        csrc.slice!('/mapper')
+
+        ctgt = @lxc['devices'].delete(disk_name)['source']
+
+        update
+
+        RAW.new.run('unmap', ctgt, csrc)
     end
 
     # Setup the disk by mapping/unmapping the disk device

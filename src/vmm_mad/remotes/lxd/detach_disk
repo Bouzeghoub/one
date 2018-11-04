@@ -18,30 +18,21 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
-require 'base64'
+require 'container'
 
-LXDriver.log_init
+require_relative '../../scripts_common' 
 
-vm_name = ARGV[0]
-image_path = ARGV[1]
-target = ARGV[2]
-disk_index = ARGV[3]
-vm_id = ARGV[4]
-vm_name = 'one-' + vm_id
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
+vm_name   = ARGV[0]
+tgt_path  = ARGV[1]
+tgt       = ARGV[2]
+tgt_index = ARGV[3]
 
-info = LXDriver.action_xml
-disks = info.multiple_elements('DISK')
-disk_info = info.device_info(disks, 'DISK', target)
+xml = STDIN.read
 
-client = LXDClient.new
-container = Container.get(vm_name, client)
+client    = LXDClient.new
+container = Container.get(vm_name, xml, client)
 
-mount = container.devices.delete('disk' + disk_info['DISK_ID'])['source']
-container.update
-
-mapper = LXDriver.select_driver(disk_info)
-mapper.run('unmap', mount)
-
-LXDriver.log_end(t0)
+container.detach_disk
