@@ -18,25 +18,25 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
+require 'container'
 
-LXDriver.log_init
+require_relative '../../scripts_common' 
 
-vm_name = ARGV[0]
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
+vm_name  = ARGV[0]
 iso_path = ARGV[2]
-vm_id = ARGV[3]
+vm_id    = ARGV[3]
 
+xml = STDIN.read
+
+# ------------------------------------------------------------------------------
+# Setup Context for the container
+# ------------------------------------------------------------------------------
 if iso_path != ''
-    info = LXDriver.action_xml
+    client    = LXDClient.new
+    container = Container.get(vm_name, xml, client)
 
-    client = LXDClient.new
-    container = Container.get(vm_name, client)
-
-    context_hash = info.context
-    LXDriver.context(context_hash['context']['source'], 'map')
-    container.devices.update(context_hash)
-    container.update
+    container.attach_context
 end
-
-LXDriver.log_end(t0)

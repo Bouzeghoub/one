@@ -18,14 +18,22 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
+require 'container'
 
-LXDriver.log_init
+require_relative '../../scripts_common' 
 
-client = LXDClient.new
-container = Container.get(ARGV[0], client)
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
+vm_name = ARGV[0]
+xml     = STDIN.read
 
+client    = LXDClient.new
+container = Container.get(vm_name, xml, client)
+
+# ------------------------------------------------------------------------------
+# Stop the container, start it and reset VNC server
+# ------------------------------------------------------------------------------
 if ARGV[-1] == '-f'
     container.stop(:force => true)
 else
@@ -34,6 +42,5 @@ end
 
 container.start
 
-LXDriver.vnc(LXDriver::XML.new(container.config['user.xml']))
+#LXDriver.vnc(LXDriver::XML.new(container.config['user.xml']))
 
-LXDriver.log_end(t0)

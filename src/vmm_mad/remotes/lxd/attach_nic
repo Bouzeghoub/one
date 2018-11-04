@@ -18,28 +18,26 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
+require 'container'
 
-LXDriver.log_init
+require_relative '../../scripts_common' 
 
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
 vm_name = ARGV[0]
-mac = ARGV[1]
-bridge = ARGV[2]
-model = ARGV[3]
+mac     = ARGV[1]
+bridge  = ARGV[2]
+model   = ARGV[3]
 net_drv = ARGV[4]
-host_nic = ARGV[5]
+host_nic= ARGV[5]
+
 vm_id = ARGV[6]
-host = ARGV[7]
+host  = ARGV[7]
 
-info = LXDriver.action_xml
-nics = info.multiple_elements('NIC')
-nic_info = info.device_info(nics, 'NIC', mac)
+xml = STDIN.read
 
-client = LXDClient.new
-container = Container.get(vm_name, client)
+client    = LXDClient.new
+container = Container.get(vm_name, xml, client)
 
-container.devices.update(info.nic(nic_info))
-container.update
-
-LXDriver.log_end(t0)
+container.attach_nic(mac)

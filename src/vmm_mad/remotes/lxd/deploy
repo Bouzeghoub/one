@@ -18,33 +18,77 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
+require 'container'
 
-LXDriver.log_init
+require_relative '../../scripts_common' 
 
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
 xml_path = ARGV[0]
-vm_id = ARGV[2]
+vm_id    = ARGV[2]
 
 xml = STDIN.read
-info = LXDriver::XML.new(xml)
-client = LXDClient.new
 
-yaml = LXDriver::YAML.new(info)
-container = Container.new(yaml, client)
-LXDriver.container_create(container, client)
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
+client    = LXDClient.new
+container = Container.new_from_xml(xml, client)
 
-if info.wild
-    container.start
+# ------------------------------------------------------------------------------
+# Create Container in LXD
+#   - Already exists: gets container metadata from LXD and set OpenNebula
+#     configurations to update existing container.
+#   - Not exists. Creates new container in LXD.
+# ------------------------------------------------------------------------------
+if Container.exist?(container.name, client)
+    OpenNebula.log_info('Overriding container')
+
+    config  = container.config
+    devices = container.devices
+
+    container.get_metadata 
+
+    err_msg   = 'A container with the same ID is already running'
+
+    raise LXDError, err_msg if container.status == 'Running'
+
+    container.config.update(config)
+
+    container.devices.update(devices)
+
+    container.update
 else
-    LXDriver.container_storage(info, 'map')
-    LXDriver.container_start(container, info)
+    container.create
 end
 
+# ------------------------------------------------------------------------------
+# Start the container, if not wild, maps storage to host directories
+# ------------------------------------------------------------------------------
+if container.wild? 
+    container.start
+else
+    container.setup_storage('map')
+
+    if container.start != 'Running'
+        OpenNebula.log_error('Container failed to start')
+
+        container.setup_storage('unmap')
+        container.delete
+
+        raise LXDError, container.status 
+    end
+end
+
+#-------------------------------------------------------------------------------
+# Updates container configuration with the OpenNebulaVM description
+# ------------------------------------------------------------------------------
 container.config.update('user.xml' => xml)
+
 container.update
 
-LXDriver.vnc(info)
-LXDriver.log_end(t0)
+#LXDriver.vnc(info)
 
 puts container.name
+

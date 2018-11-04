@@ -39,7 +39,7 @@ module LXD
         # as not found.
         # @param one_vm [String] with the VM name
         def get_vm_info(one_vm)
-            vm = Container.get(one_vm, CLIENT)
+            vm = Container.get(one_vm, nil, CLIENT)
 
             return { :state => '-' } unless vm
 
@@ -64,13 +64,14 @@ module LXD
             vms_info = {}
 
             running_containers = []
+
             vms.each do |container|
                 values = {}
                 name = container.name
                 values[:state] = get_state(container)
 
                 unless name =~ /^one-\d+/ # Wild VMs
-                    template = yaml_to_one(container)
+                    template = to_one(container)
                     values[:template] = Base64.encode64(template).delete("\n")
                     values[:vm_name] = name
                 end
@@ -166,7 +167,9 @@ module LXD
             cpu_jiffies = get_cpu_jiffies - start_cpu_jiffies
 
             vm_names.each do |vm_name|
-                cpu_used[vm_name] = (get_process_jiffies(vm_name).to_f - cpu_used[vm_name]) / cpu_jiffies
+                cpu_used[vm_name] = (get_process_jiffies(vm_name).to_f - 
+                        cpu_used[vm_name]) / cpu_jiffies
+
                 cpu_used[vm_name] = (cpu_used[vm_name] * multiplier).round(2)
             end
 
@@ -214,12 +217,13 @@ module LXD
             memory
         end
 
-        def yaml_to_one(container)
-            name = container.name
-            arch = container.info['architecture']
+        def to_one(container)
+            name     = container.name
+            arch     = container.architecture
             capacity = container.expanded_config
-            cpu = capacity['limits.cpu.allowance'].chomp('%').to_f / 100
-            vcpu = capacity['limits.cpu']
+
+            cpu    = capacity['limits.cpu.allowance'].chomp('%').to_f / 100
+            vcpu   = capacity['limits.cpu']
             memory = parse_memory(capacity['limits.memory'])
 
             template = <<EOT
@@ -231,7 +235,6 @@ HYPERVISOR="lxd"
 IMPORT_VM_ID="#{name}"
 OS=[ARCH="#{arch}"]
 EOT
-
             template
         end
 

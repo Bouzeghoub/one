@@ -754,8 +754,7 @@ VMM_EXEC_LXD_SCRIPTS="src/vmm_mad/remotes/lxd/cancel \
                     src/vmm_mad/remotes/lxd/prereconfigure \
                     src/vmm_mad/remotes/lxd/resize_disk"
 
-VMM_EXEC_LXD_LIB="src/vmm_mad/remotes/lib/lxd/lxd_driver.rb \
-                src/vmm_mad/remotes/lib/lxd/xml_tools.rb \
+VMM_EXEC_LXD_LIB="src/vmm_mad/remotes/lib/lxd/opennebula_vm.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/mapper.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/qcow2.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/raw.rb \

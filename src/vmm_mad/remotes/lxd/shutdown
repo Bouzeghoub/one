@@ -18,28 +18,33 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
+require 'container'
 
-LXDriver.log_init
+require_relative '../../scripts_common' 
 
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
 vm_name = ARGV[0]
-vm_id = ARGV[2]
+vm_id   = ARGV[2]
 
-info = LXDriver.action_xml
+xml = STDIN.read
 
-client = LXDClient.new
-container = Container.get(vm_name, client)
+client    = LXDClient.new
+container = Container.get(vm_name, xml, client)
 
+# ------------------------------------------------------------------------------
+# Stop the container & unmap devices if not a wild container
+# ------------------------------------------------------------------------------
 if ARGV[-1] == '-f'
     container.stop(:force => true)
 else
     container.stop
 end
 
-unless info.wild
+if !container.wild?
     begin
-        LXDriver.container_storage(info, 'unmap')
+        container.setup_storage('unmap')
     rescue StandardError => e
         container.start
         raise e
@@ -48,4 +53,3 @@ unless info.wild
     container.delete
 end
 
-LXDriver.log_end(t0)

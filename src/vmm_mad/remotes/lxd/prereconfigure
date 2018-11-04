@@ -18,23 +18,22 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
+require 'container'
 
-LXDriver.log_init
+require_relative '../../scripts_common' 
 
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
 vm_name = ARGV[0]
-vm_id = ARGV[2]
+vm_id   = ARGV[2]
 
-client = LXDClient.new
-container = Container.get(vm_name, client)
+xml = STDIN.read
 
-if container.devices.include?('context')
-    mountpoint = container.devices.delete('context')['source']
-    container.update
+# ------------------------------------------------------------------------------
+# Setup Context for the container
+# ------------------------------------------------------------------------------
+client    = LXDClient.new
+container = Container.get(vm_name, xml, client)
 
-    # TODO: iso loop doesn't unmount in first nic_attach
-    LXDriver.context(mountpoint, 'unmap')
-end
-
-LXDriver.log_end(t0)
+container.detach_context
