@@ -185,6 +185,14 @@ class Container
         update
     end
 
+    def detach_nic(mac)
+        @lxc['devices'].delete_if { |device, config|
+            device.include?('eth') && config['hwaddr'] == mac
+        } 
+
+        update
+    end
+
     #---------------------------------------------------------------------------
     # Container Storage
     #---------------------------------------------------------------------------
