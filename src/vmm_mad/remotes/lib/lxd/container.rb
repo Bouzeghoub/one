@@ -239,6 +239,26 @@ class Container
         RAW.new.run('unmap', ctgt, csrc)
     end
 
+    def attach_disk
+        return unless @one
+
+        disk_a = @one.get_disks.select do |disk|
+            disk['ATTACH'].upcase == 'YES'
+        end
+
+        disk_element = disk_a.first
+
+        return unless disk_element
+
+        setup_disk(disk_element, 'map')
+
+        disk_hash = @one.disk(disk_element)
+
+        @lxc['devices'].update(disk_hash)
+
+        update
+    end
+
     # Setup the disk by mapping/unmapping the disk device
     def setup_disk(disk, operation)
         return if !@one

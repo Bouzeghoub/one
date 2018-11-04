@@ -18,37 +18,24 @@
 
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
-t0 = Time.now
-require 'lxd_driver'
-require 'base64'
+require 'container'
 
-LXDriver.log_init
+require_relative '../../scripts_common' 
 
-vm_name = ARGV[0]
+# ------------------------------------------------------------------------------
+# Action Arguments, STDIN includes XML description of the OpenNebula VM
+# ------------------------------------------------------------------------------
+vm_name    = ARGV[0]
 image_path = ARGV[1]
-target = ARGV[2]
+target     = ARGV[2]
 disk_index = ARGV[3]
-xml = ARGV[4]
-vm_id = ARGV[5]
+xml64      = ARGV[4]
+vm_id      = ARGV[5]
 
-# xml creation
-info = LXDriver.action_xml(Base64.decode64(xml))
-disks = info.multiple_elements('DISK')
-disk_info = info.device_info(disks, 'DISK', target)
+xml = STDIN.read
 
-# post_process
-disk_hash = info.disk(disk_info)
+client    = LXDClient.new
+container = Container.get(vm_name, xml, client)
 
-client = LXDClient.new
-container = Container.get(vm_name, client)
+container.attach_disk
 
-# mount and container disk creation
-source = disk_hash.values[0]['source']
-device = LXDriver.device_path(info, disk_info)
-mapper = LXDriver.select_driver(disk_info)
-mapper.run('map', source, device)
-
-container.devices.update(disk_hash)
-container.update
-
-LXDriver.log_end(t0)

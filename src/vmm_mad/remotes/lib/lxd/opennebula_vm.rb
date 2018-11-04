@@ -191,7 +191,7 @@ class OpenNebulaVM
         if disk_id == @rootfs_id
             disk = { 'type' => 'disk', 'path' => '/', 'pool' => 'default' }
         else
-            source = LXDriver.device_path(self, info, 'mapper/')
+            source = "#{@ds_path}/#{@sysds_id}/#{@vm_id}/mapper/disk.#{disk_id}"
 
             path = info['TARGET']
             path = "/media/#{disk_id}" unless path[0] == '/'
@@ -220,7 +220,7 @@ class OpenNebulaVM
             disk['limits.max'] = "#{tiops}iops"
         end
 
-        if tbyes.empty? && tiops.empty?
+        if tbytes.empty? && tiops.empty?
             disk_map = {
                 'limits.read'  => 'READ_BYTES_SEC',
                 'limits.write' => 'WRITE_BYTES_SEC'
