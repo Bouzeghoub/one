@@ -36,7 +36,7 @@ class QCOW2 < Mapper
     def detect_parts(block)
         parts = [{ :fstype => nil }]
         while parts[0]['fstype'].nil?
-            sleep 0.1
+            sleep 0.1 # nbd takes a little to load partition info
             parts = super(block)
         end
         parts
