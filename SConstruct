@@ -266,8 +266,8 @@ pre_build_scripts = [
     'share/rubygems',
     'src/im_mad/collectd',
     'src/client',
-    'src/docker_machine'
-    'src/svncterm/'
+    'src/docker_machine',
+    'src/vmm_mad/remotes/lib/lxd/svncterm'
 ]
 
 build_scripts = []
