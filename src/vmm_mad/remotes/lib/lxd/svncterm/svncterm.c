@@ -43,12 +43,10 @@
 /* svncterm server */
 #include <fcntl.h>  
 #include <sys/stat.h>
+#include <limits.h>
 
 #include "svncterm.h"
 #include "glyphs.h"
-
-/* define this for debugging */
-//#define DEBUG
 
 #define DH_BITS 1024
 #define TERM "xterm"
@@ -62,9 +60,6 @@
 }
 
 /* these colours are from linux kernel drivers/char/vt.c */
-
-static int idle_timeout = 1;
-
 unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
 				8,12,10,14, 9,13,11,15 };
 
@@ -75,13 +70,6 @@ int default_grn[] = {0x00,0x00,0xaa,0x55,0x00,0x00,0xaa,0xaa,
     0x55,0x55,0xff,0xff,0x55,0x55,0xff,0xff};
 int default_blu[] = {0x00,0x00,0x00,0x00,0xaa,0xaa,0xaa,0xaa,
     0x55,0x55,0x55,0x55,0xff,0xff,0xff,0xff};
-
-static void
-print_usage (const char *msg)
-{
-  if (msg) { fprintf (stderr, "ERROR: %s\n", msg); }
-  fprintf (stderr, "USAGE: vncterm [vncopts] [-c command [args]]\n");
-}
 
 /* Convert UCS2 to UTF8 sequence, trailing zero */
 static int
@@ -1856,7 +1844,16 @@ vncTerm * create_vncterm (int sd, int maxx, int maxy)
 /*   descriptor set                                                           */
 /* -------------------------------------------------------------------------- */
 static const char CTRL_PIPE_PATH[] = "/tmp/svncterm_server_pipe";
-static const int  MAX_CLIENT_FD    = 1024;
+#define MAX_CLIENT_FD 1024
+#define ARG_MAX 256
+
+struct vncterm_command
+{
+    int vnc_port;
+
+    int argc;
+    char *argv[ARG_MAX];
+};
 
 /**
  *  Opens the CTRL_PIPE of the server and returns its file descriptor.
@@ -1909,23 +1906,34 @@ int init_ctrl_pipe()
 /**
  *  Closes server socket associated to the given vnc_port
  */
-void del_cmd(int vnc_port, int * client_fds)
+void del_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
 {
     for (int i = 0 ; i < MAX_CLIENT_FD; ++i)
     {
-        if ( client_fds[i] == vnc_port )
+        if (client_fds[i] == NULL || client_fds[i]->vnc_port != cmd->vnc_port)
         {
-            close(i);
-
-            client_fds[i] == -1;
+            continue;
         }
+
+        close(i);
+
+        for (int j = 0 ; j < client_fds[i]->argc ; ++j)
+        {
+            free(client_fds[i]->argv[j]);
+        }
+
+        free(client_fds[i]);
+        
+        client_fds[i] = NULL;
+
+        break;
     }
 }
 
 /**
  *  Opens a TCP socket and binds it to the given vnc_port.
  */
-void add_cmd(int vnc_port, int * client_fds)
+void add_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
 {
     struct addrinfo hints;
     struct addrinfo *results;
@@ -1939,7 +1947,7 @@ void add_cmd(int vnc_port, int * client_fds)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags    = AI_PASSIVE;
 
-    snprintf(serv, NI_MAXSERV - 1, "%i", vnc_port);
+    snprintf(serv, NI_MAXSERV - 1, "%i", cmd->vnc_port);
 
     //TODO - Support IPv6 "::"
     int rc = getaddrinfo("0.0.0.0", serv, &hints, &results);
@@ -1978,27 +1986,58 @@ void add_cmd(int vnc_port, int * client_fds)
         return;
     }
 
-    client_fds[sd] = vnc_port;
+    client_fds[sd] = cmd;
 }
 
-void cmd_ctrl_pipe(int pipe_fd, int * client_fds)
+void cmd_ctrl_pipe(int pipe_fd, struct vncterm_command ** client_fds)
 {
-    char cmd[80];
-    int vnc_port;
+    char cmd[256];
+    int  i;
 
-    int rb = read(pipe_fd, cmd, 79);
+    struct vncterm_command * vt_cmd;
+    
+    int rb = read(pipe_fd, cmd, 255);
 
     cmd[rb]='\0';
 
-    vnc_port = atoi(cmd);
-
-    if ( vnc_port < 0 )
+    if ( rb <= 1 )
     {
-        del_cmd(-vnc_port, client_fds);
+        return;
     }
-    else if ( vnc_port > 0 )
+    
+    if ( cmd[rb-1] == '\n' )
     {
-        add_cmd(vnc_port, client_fds);
+        cmd[rb-1] = '\0';
+    }
+
+    char * token;
+    
+    vt_cmd = (struct vncterm_command *) malloc(sizeof(struct vncterm_command));
+
+    token = strtok(cmd, " ");
+
+    vt_cmd->vnc_port = atoi(token);
+
+    for (i = 0; token != NULL && i < ARG_MAX - 1; ++i )
+    {
+        if ((token = strtok(NULL, " ")) != NULL)
+        {
+            vt_cmd->argv[i] = strdup(token);
+        }
+    }
+
+    vt_cmd->argv[i-1] = NULL;
+    vt_cmd->argc      = i-1;
+
+    if ( vt_cmd->vnc_port < 0 )
+    {
+        vt_cmd->vnc_port = -vt_cmd->vnc_port;
+
+        del_cmd(vt_cmd, client_fds);
+    }
+    else if ( vt_cmd->vnc_port > 0 )
+    {
+        add_cmd(vt_cmd, client_fds);
     }
 }
 
@@ -2061,24 +2100,15 @@ int vncterm_cmd(int sd, int timeout, int argc, char **argv)
 	{
 		fd_set fs;
 		struct timeval tv;
-		int nfds;
 
 		FD_ZERO(&fs);
 		
-		if (vt->mark_active)
-		{
-			FD_SET(master, &fs);
-			nfds = master + 1;
-		}
-		else //just sleep to account inactivaty
-		{
-			nfds = 0;
-		}
+        FD_SET(master, &fs);
 
 		tv.tv_sec  = 0;
 		tv.tv_usec = 5000; /* 5 ms */
 
-		if ( count * 5 > timeout )
+		if ( count * 45 > timeout*1000 )
 		{
 			break;
 		}
@@ -2094,7 +2124,7 @@ int vncterm_cmd(int sd, int timeout, int argc, char **argv)
 			last_time = time (NULL);
 		}
 
-		int num_fds = select (nfds, &fs, NULL, NULL, &tv);
+		int num_fds = select (master + 1, &fs, NULL, NULL, &tv);
 		
 		if ( num_fds == 0 )
 		{
@@ -2128,7 +2158,7 @@ int vncterm_cmd(int sd, int timeout, int argc, char **argv)
 
 int vncterm_server()
 {
-    int client_fds[MAX_CLIENT_FD];
+    struct vncterm_command * client_fds[MAX_CLIENT_FD];
 
     fd_set fds;
     int max_fd;
@@ -2137,7 +2167,7 @@ int vncterm_server()
 
     for (int i = 0 ; i < MAX_CLIENT_FD ; ++i)
     {
-        client_fds[i] = -1;
+        client_fds[i] = NULL;
     }
 
     ctrl_pipe = init_ctrl_pipe();
@@ -2149,7 +2179,6 @@ int vncterm_server()
 
     while(1)
     {
-        /* Initialize fd set for select */
         FD_ZERO(&fds);
 
         max_fd = ctrl_pipe;
@@ -2157,7 +2186,7 @@ int vncterm_server()
 
         for (int i = 0; i < MAX_CLIENT_FD; ++i)
         {
-            if ( client_fds[i] != -1 )
+            if ( client_fds[i] != NULL )
             {
                 if ( i > max_fd )
                 {
@@ -2177,7 +2206,7 @@ int vncterm_server()
 
 		for (int i = 0; i < MAX_CLIENT_FD; ++i)
 		{
-			if ( client_fds[i] != -1 && FD_ISSET(i, &fds) )
+			if ( client_fds[i] != NULL && FD_ISSET(i, &fds) )
 			{
 				int client_sd = accept(i, NULL, NULL);
 				
@@ -2187,10 +2216,10 @@ int vncterm_server()
 
 					if ( pid == 0 )
 					{
-						char * argv[] = {"/bin/bash", NULL};
-
 						close(i);
-						vncterm_cmd(client_sd, 300, 1, argv);
+
+						vncterm_cmd(client_sd, 300, client_fds[i]->argc, 
+                                client_fds[i]->argv);
 					}
 
 					close(client_sd);
@@ -2203,4 +2232,8 @@ int vncterm_server()
 int main (int argc, char** argv)
 {
 	vncterm_server();
+
+    return 0;
 }
+
+
