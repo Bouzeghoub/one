@@ -26,10 +26,9 @@ require_relative '../../scripts_common'
 # Action Arguments, STDIN includes XML description of the OpenNebula VM
 # ------------------------------------------------------------------------------
 vm_name = ARGV[0]
-xml     = STDIN.read
 
 client    = LXDClient.new
-container = Container.get(vm_name, xml, client)
+container = Container.get(vm_name, nil, client)
 
 # ------------------------------------------------------------------------------
 # Stop the container, start it and reset VNC server
