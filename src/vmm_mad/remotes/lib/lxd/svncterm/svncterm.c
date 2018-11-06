@@ -40,11 +40,13 @@
 #include <signal.h>
 #include <locale.h>
 
+/* svncterm server */
+#include <fcntl.h>  
+#include <sys/stat.h>
+#include <limits.h>
+
 #include "svncterm.h"
 #include "glyphs.h"
-
-/* define this for debugging */
-//#define DEBUG
 
 #define DH_BITS 1024
 #define TERM "xterm"
@@ -58,9 +60,6 @@
 }
 
 /* these colours are from linux kernel drivers/char/vt.c */
-
-static int idle_timeout = 1;
-
 unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
 				8,12,10,14, 9,13,11,15 };
 
@@ -71,13 +70,6 @@ int default_grn[] = {0x00,0x00,0xaa,0x55,0x00,0x00,0xaa,0xaa,
     0x55,0x55,0xff,0xff,0x55,0x55,0xff,0xff};
 int default_blu[] = {0x00,0x00,0x00,0x00,0xaa,0xaa,0xaa,0xaa,
     0x55,0x55,0x55,0x55,0xff,0xff,0xff,0xff};
-
-static void
-print_usage (const char *msg)
-{
-  if (msg) { fprintf (stderr, "ERROR: %s\n", msg); }
-  fprintf (stderr, "USAGE: vncterm [vncopts] [-c command [args]]\n");
-}
 
 /* Convert UCS2 to UTF8 sequence, trailing zero */
 static int
@@ -1736,238 +1728,512 @@ rfbBool CheckPasswordByList(rfbClientPtr cl,const char* response,int len) {
   return (FALSE);
 }
 
-vncTerm *
-create_vncterm (int argc, char** argv, int maxx, int maxy)
+/* -------------------------------------------------------------------------- */
+/*                                                                            */
+/* -------------------------------------------------------------------------- */
+
+vncTerm * create_vncterm (int sd, int maxx, int maxy)
 {
-  int i;
+	int i;
 
-  rfbScreenInfoPtr screen = rfbGetScreen (&argc, argv, maxx, maxy, 8, 1, 1);
-  screen->frameBuffer=(char*)calloc(maxx*maxy, 1);
+	rfbScreenInfoPtr screen = rfbGetScreen (NULL, NULL, maxx, maxy, 8, 1, 1);
 
-  vncTerm *vt = (vncTerm *)calloc (sizeof(vncTerm), 1);
+	screen->frameBuffer = (char*) calloc(maxx*maxy, 1);
 
-  rfbColourMap *cmap =&screen->colourMap;
-  cmap->data.bytes = malloc (16*3);
-  for(i=0;i<16;i++) {
-    cmap->data.bytes[i*3 + 0] = default_red[color_table[i]];
-    cmap->data.bytes[i*3 + 1] = default_grn[color_table[i]];
-    cmap->data.bytes[i*3 + 2] = default_blu[color_table[i]];
-  }
-  cmap->count = 16;
-  cmap->is16 = FALSE;
-  screen->serverFormat.trueColour = FALSE;
+	vncTerm *vt = (vncTerm *) calloc(sizeof(vncTerm), 1);
 
-  screen->kbdAddEvent = vncterm_kbd_event;
+	rfbColourMap * cmap = &screen->colourMap;
 
-  screen->setXCutText = vncterm_set_xcut_text;
+	cmap->data.bytes = malloc (16*3);
 
-  screen->ptrAddEvent = vncterm_pointer_event;
+	for(i=0;i<16;i++) 
+	{
+		cmap->data.bytes[i*3 + 0] = default_red[color_table[i]];
+		cmap->data.bytes[i*3 + 1] = default_grn[color_table[i]];
+		cmap->data.bytes[i*3 + 2] = default_blu[color_table[i]];
+	}
 
-  screen->desktopName = "VNC Command Terminal";
+	cmap->count = 16;
+	cmap->is16  = FALSE;
 
-  screen->newClientHook = new_client;
+	screen->inetdSock = sd;
 
-  vt->maxx = screen->width;
-  vt->maxy = screen->height;
+	screen->serverFormat.trueColour = FALSE;
 
-  vt->width = vt->maxx / 8;
-  vt->height = vt->maxy / 16;
+	screen->kbdAddEvent = vncterm_kbd_event;
 
-  vt->total_height = vt->height * 20;
-  vt->scroll_height = 0;
-  vt->y_base =  0;
-  vt->y_displ =  0;
+	screen->setXCutText = vncterm_set_xcut_text;
 
-  vt->region_top = 0;
-  vt->region_bottom = vt->height;
+	screen->ptrAddEvent = vncterm_pointer_event;
 
-  vt->g0enc = LAT1_MAP;
-  vt->g1enc = GRAF_MAP;
-  vt->cur_enc = vt->g0enc;
-  vt->charset = 0;
+	screen->desktopName = "VNC Command Terminal";
 
-  /* default text attributes */
-  vt->default_attrib.bold = 0;
-  vt->default_attrib.uline = 0;
-  vt->default_attrib.blink = 0;
-  vt->default_attrib.invers = 0;
-  vt->default_attrib.unvisible = 0;
-  vt->default_attrib.fgcol = 7;
-  vt->default_attrib.bgcol = 0;
+	screen->newClientHook = new_client;
 
-  vt->cur_attrib = vt->default_attrib;
+	screen->screenData = (void*) vt;
 
-  vt->cells = (TextCell *)calloc (sizeof (TextCell), vt->width*vt->total_height);
+	vt->maxx = screen->width;
+	vt->maxy = screen->height;
 
-  for (i = 0; i < vt->width*vt->total_height; i++) {
-    vt->cells[i].ch = ' ';
-    vt->cells[i].attrib = vt->default_attrib;
-  }
+	vt->width  = vt->maxx / 8;
+	vt->height = vt->maxy / 16;
 
-  vt->altcells = (TextCell *)calloc (sizeof (TextCell), vt->width*vt->height);
+	vt->total_height  = vt->height * 20;
+	vt->scroll_height = 0;
+	vt->y_base  =  0;
+	vt->y_displ =  0;
 
-  vt->screen = screen;
+	vt->region_top    = 0;
+	vt->region_bottom = vt->height;
 
-  screen->screenData = (void*)vt;
+	vt->g0enc = LAT1_MAP;
+	vt->g1enc = GRAF_MAP;
 
-  //screen->autoPort = 1;
+	vt->cur_enc = vt->g0enc;
+	vt->charset = 0;
 
-  rfbInitServer(screen);
- 
-  if (screen->authPasswdData && strcmp(((char**)screen->authPasswdData)[0], "")) {
-        screen->passwordCheck = CheckPasswordByList;
-  	rfbRegisterSecurityHandler(&VncSecurityHandlerVncAuth);
-  }
-  else {
-	screen->authPasswdData = NULL;
-        screen->passwordCheck = NULL;
-        rfbRegisterSecurityHandler(&VncSecurityHandlerNone);
-  }
+	/* default text attributes */
+	vt->default_attrib.bold      = 0;
+	vt->default_attrib.uline     = 0;
+	vt->default_attrib.blink     = 0;
+	vt->default_attrib.invers    = 0;
+	vt->default_attrib.unvisible = 0;
 
-  return vt;
+	vt->default_attrib.fgcol = 7;
+	vt->default_attrib.bgcol = 0;
+
+	vt->cur_attrib = vt->default_attrib;
+
+	vt->cells = (TextCell *)calloc(sizeof(TextCell), vt->width*vt->total_height);
+
+	for (i = 0; i < vt->width * vt->total_height; i++) 
+	{
+		vt->cells[i].ch = ' ';
+		vt->cells[i].attrib = vt->default_attrib;
+	}
+
+	vt->altcells = (TextCell *)calloc (sizeof (TextCell), vt->width*vt->height);
+
+	vt->screen = screen;
+
+	rfbInitServer(screen);
+
+	if (screen->authPasswdData && strcmp(((char**)screen->authPasswdData)[0],"")) 
+	{
+		screen->passwordCheck = CheckPasswordByList;
+
+		rfbRegisterSecurityHandler(&VncSecurityHandlerVncAuth);
+	}
+	else 
+	{
+		screen->authPasswdData = NULL;
+		screen->passwordCheck  = NULL;
+
+		rfbRegisterSecurityHandler(&VncSecurityHandlerNone);
+	}
+
+	return vt;
 }
 
-int
-main (int argc, char** argv)
+/* -------------------------------------------------------------------------- */
+/* Function to control managment pipe. It reads from a named pipe for commands*/
+/* each command is a number:                                                  */
+/*   - number > 0 Opens a TCP socket on port == number. And adds it to the    */
+/*   client descriptor set                                                    */
+/*   - number < 0 Closes the associated socket and removes it from the client */
+/*   descriptor set                                                           */
+/* -------------------------------------------------------------------------- */
+static const char CTRL_PIPE_PATH[] = "/tmp/svncterm_server_pipe";
+#define MAX_CLIENT_FD 1024
+#define ARG_MAX 256
+
+struct vncterm_command
 {
-  int i;
-  char **cmdargv = NULL;
-  char *command = "/bin/bash"; // execute normal shell as default
-  int pid;
-  int master;
-  char ptyname[1024];
-  fd_set fs, fs1;
-  struct timeval tv, tv1;
-  time_t elapsed, cur_time;
-  struct winsize dimensions;
+    int vnc_port;
 
-  for (i = 1; i < argc; i++) {
-    if (!strcmp (argv[i], "-c")) {
-      command = argv[i+1];
-      cmdargv = &argv[i+1];
-      argc = i;
-      argv[i] = NULL;
-      break;
+    int argc;
+    char *argv[ARG_MAX];
+};
+
+/**
+ *  Opens the CTRL_PIPE of the server and returns its file descriptor.
+ *  If the pipe does not exist it attempts to create it.
+ *
+ *  Return -1 in case of error
+ */
+int init_ctrl_pipe()
+{
+    int rc;
+
+    struct stat buffer;
+
+    rc = stat(CTRL_PIPE_PATH, &buffer);
+
+    if ( rc == -1 )
+    {
+        if ( errno == ENOENT )
+        {
+            rc = mkfifo(CTRL_PIPE_PATH, 0640);
+
+            if ( rc == -1 )
+            {
+                perror("mkfifo()");
+                return -1;
+            }
+        }
+        else
+        {
+            perror("stat()");
+            return -1;
+        }
     }
-  }
+    else if ( buffer.st_mode & S_IFMT != S_IFIFO )
+    {
+        fprintf(stderr,"File %s is not valid, please remove it\n", CTRL_PIPE_PATH);
+        return -1;
+    }
 
-  for (i = 1; i < argc; i++) {
-    if (!strcmp (argv[i], "-timeout")) {
-      CHECK_ARGC (argc, argv, i);
-      idle_timeout = atoi(argv[i+1]);
-      rfbPurgeArguments(&argc, &i, 2, argv); i--;
-    } 
-  }
+    rc = open(CTRL_PIPE_PATH, O_RDWR | O_NONBLOCK);
 
+    if ( rc == -1 )
+    {
+        perror("open()");
+    }
+
+    return rc;
+}
+
+/**
+ *  Closes server socket associated to the given vnc_port
+ */
+void del_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
+{
+    for (int i = 0 ; i < MAX_CLIENT_FD; ++i)
+    {
+        if (client_fds[i] == NULL || client_fds[i]->vnc_port != cmd->vnc_port)
+        {
+            continue;
+        }
+
+        close(i);
+
+        for (int j = 0 ; j < client_fds[i]->argc ; ++j)
+        {
+            free(client_fds[i]->argv[j]);
+        }
+
+        free(client_fds[i]);
+        
+        client_fds[i] = NULL;
+
+        break;
+    }
+}
+
+/**
+ *  Opens a TCP socket and binds it to the given vnc_port.
+ */
+void add_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
+{
+    struct addrinfo hints;
+    struct addrinfo *results;
+
+    char serv[NI_MAXSERV];
+
+	int yes = 1;
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family   = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags    = AI_PASSIVE;
+
+    snprintf(serv, NI_MAXSERV - 1, "%i", cmd->vnc_port);
+
+    //TODO - Support IPv6 "::"
+    int rc = getaddrinfo("0.0.0.0", serv, &hints, &results);
+
+    if (rc != 0)
+    {
+        return;
+    }
+
+    int sd = socket(results->ai_family, results->ai_socktype, results->ai_protocol);
+
+    if ( sd > MAX_CLIENT_FD )
+    {
+        close(sd);
+        return;
+    }
+
+	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(int)) < 0) 
+	{
+		close(sd);
+		return;
+    }
+
+
+    if ( bind(sd, results->ai_addr, results->ai_addrlen) != 0 )
+    {
+        close(sd);
+        return;
+    }
+
+    freeaddrinfo(results);
+
+    if ( listen(sd, 5) != 0 )
+    {
+        close(sd);
+        return;
+    }
+
+    client_fds[sd] = cmd;
+}
+
+void cmd_ctrl_pipe(int pipe_fd, struct vncterm_command ** client_fds)
+{
+    char cmd[256];
+    int  i;
+
+    struct vncterm_command * vt_cmd;
+    
+    int rb = read(pipe_fd, cmd, 255);
+
+    cmd[rb]='\0';
+
+    if ( rb <= 1 )
+    {
+        return;
+    }
+    
+    if ( cmd[rb-1] == '\n' )
+    {
+        cmd[rb-1] = '\0';
+    }
+
+    char * token;
+    
+    vt_cmd = (struct vncterm_command *) malloc(sizeof(struct vncterm_command));
+
+    token = strtok(cmd, " ");
+
+    vt_cmd->vnc_port = atoi(token);
+
+    for (i = 0; token != NULL && i < ARG_MAX - 1; ++i )
+    {
+        if ((token = strtok(NULL, " ")) != NULL)
+        {
+            vt_cmd->argv[i] = strdup(token);
+        }
+    }
+
+    vt_cmd->argv[i-1] = NULL;
+    vt_cmd->argc      = i-1;
+
+    if ( vt_cmd->vnc_port < 0 )
+    {
+        vt_cmd->vnc_port = -vt_cmd->vnc_port;
+
+        del_cmd(vt_cmd, client_fds);
+    }
+    else if ( vt_cmd->vnc_port > 0 )
+    {
+        add_cmd(vt_cmd, client_fds);
+    }
+}
+
+int vncterm_cmd(int sd, int timeout, int argc, char **argv)
+{
 #ifdef DEBUG
-  rfbLogEnable (1);
+	rfbLogEnable (1);
 #else
-  rfbLogEnable (0);
+	rfbLogEnable (0);
 #endif
+	int status;
+	int master;
 
-  vncTerm *vt = create_vncterm (argc, argv, 745, 400);
+	char ptyname[1024];
 
-  setlocale(LC_ALL, ""); // set from environment
+	struct winsize dimensions;
 
-  char *ctype = setlocale (LC_CTYPE, NULL); // query LC_CTYPE
+	vncTerm *vt = create_vncterm(sd, 745, 400);
 
-  // fixme: ist there a standard way to detect utf8 mode ?
-  if (strcasestr (ctype, ".utf-8")||strcasestr (ctype, ".utf8")) {
-    vt->utf8 = 1;
-  }
+	setlocale(LC_ALL, ""); // set from environment
 
-  dimensions.ws_col = vt->width;
-  dimensions.ws_row = vt->height;
+	char *ctype = setlocale (LC_CTYPE, NULL); // query LC_CTYPE
 
-  setenv ("TERM", TERM, 1);
-
-  pid = forkpty (&master, ptyname, NULL, &dimensions);
-  if(!pid) {
-
-    // install default signal handlers
-    signal (SIGQUIT, SIG_DFL);
-    signal (SIGTERM, SIG_DFL);
-    signal (SIGINT, SIG_DFL);
-
-    if (cmdargv) {
-      execvp (command, cmdargv);
-    } else {
-      execlp (command, command, NULL);
-    }
-    perror ("Error: exec failed\n");
-    exit (-1); // should not be reached
-  } else if (pid == -1) {
-    perror ("Error: fork failed\n");
-    exit (-1);
-  }
-
-  FD_ZERO (&fs);
-  FD_SET (master, &fs);
-  tv.tv_sec = 0;
-  tv.tv_usec = 5000; /* 5 ms */
-
-  last_time = time (NULL);
-
-  int count = 0;
-  while (1) {
-    count ++;
-    tv1 = tv;
-    fs1 = fs;
-
-    cur_time = time (NULL);
-
-    elapsed = cur_time - last_time;
-    //printf ("Elapsed %ld\n", elapsed);
-
-    if (last_client) {
-      if (client_connected) {
-	if (idle_timeout && (elapsed >= idle_timeout)) {
-	  break;
+	// fixme: ist there a standard way to detect utf8 mode ?
+	if (strcasestr(ctype, ".utf-8") || strcasestr(ctype, ".utf8")) 
+	{
+		vt->utf8 = 1;
 	}
-      } else {
-	// wait at least 20 seconds for initial connect
-	if (idle_timeout && (elapsed >= (idle_timeout > 20 ? idle_timeout : 20))) {
-	  break;
+
+	dimensions.ws_col = vt->width;
+	dimensions.ws_row = vt->height;
+
+	setenv ("TERM", TERM, 1);
+
+	int pid = forkpty (&master, ptyname, NULL, &dimensions);
+
+	switch (pid)
+	{
+		case -1:
+			perror("fork()");
+			exit(-1);
+
+		case 0:
+			signal(SIGQUIT, SIG_DFL);
+			signal(SIGTERM, SIG_DFL);
+			signal(SIGINT, SIG_DFL);
+
+			execvp(argv[0], argv);
+			break;
+		default:
+			break;
 	}
-      }
-    } else {
-      // exit after 30 minutes idle time
-      if (elapsed >= 30*60) {
-	break;
-      }
-    }
 
-    rfbProcessEvents (vt->screen, 40000); /* 40 ms */
+	int count = 0;
 
-    if (vt->ibuf_count > 0) {
-      //printf ("DEBUG: WRITE %d %d\n", vt->ibuf[0], vt->ibuf_count);
-      write (master, vt->ibuf, vt->ibuf_count);
-      vt->ibuf_count = 0;
-      last_time = time (NULL);
-    }
+	char buffer[1024];
+	int c;
 
-    if (!vt->mark_active) {
+	while(1)
+	{
+		fd_set fs;
+		struct timeval tv;
 
-      int num_fds = select (master+1, &fs1, NULL, NULL, &tv1);
-      if (num_fds >= 0) {
-	if (FD_ISSET (master, &fs1)) {
-	  char buffer[1024];
-	  int c;
-	  while ((c = read (master, buffer, 1024)) == -1) {
-	    if (errno != EAGAIN) break;
-	  }
-	  if (c == -1) break;
-	  vncterm_puts (vt, buffer, c);
+		FD_ZERO(&fs);
+		
+        FD_SET(master, &fs);
+
+		tv.tv_sec  = 0;
+		tv.tv_usec = 5000; /* 5 ms */
+
+		if ( count * 45 > timeout*1000 )
+		{
+			break;
+		}
+
+		rfbProcessEvents (vt->screen, 40000); /* 40 ms */
+
+		if (vt->ibuf_count > 0) 
+		{
+			write(master, vt->ibuf, vt->ibuf_count);
+
+			vt->ibuf_count = 0;
+
+			last_time = time (NULL);
+		}
+
+		int num_fds = select (master + 1, &fs, NULL, NULL, &tv);
+		
+		if ( num_fds == 0 )
+		{
+			count++;
+			continue;
+		}
+		else if ( num_fds == -1 )
+		{
+			break;
+		}
+
+		count = 0;
+
+		while ((c = read(master, buffer, 1024)) == -1) 
+		{
+			if (errno != EAGAIN) 
+			{
+				break;
+			}
+		}
+		
+		vncterm_puts(vt, buffer, c);
 	}
-      } else {
-	break;
-      }
-    }
-  }
 
-  kill (pid, 9);
-  int status;
-  waitpid(pid, &status, 0);
+	kill(pid, 9);
 
-  exit (0);
+	waitpid(pid, &status, 0);
+
+	exit (0);
 }
+
+int vncterm_server()
+{
+    struct vncterm_command * client_fds[MAX_CLIENT_FD];
+
+    fd_set fds;
+    int max_fd;
+
+    int ctrl_pipe;
+
+    for (int i = 0 ; i < MAX_CLIENT_FD ; ++i)
+    {
+        client_fds[i] = NULL;
+    }
+
+    ctrl_pipe = init_ctrl_pipe();
+
+    if ( ctrl_pipe == -1 )
+    {
+        return -1;
+    }
+
+    while(1)
+    {
+        FD_ZERO(&fds);
+
+        max_fd = ctrl_pipe;
+        FD_SET(ctrl_pipe, &fds);
+
+        for (int i = 0; i < MAX_CLIENT_FD; ++i)
+        {
+            if ( client_fds[i] != NULL )
+            {
+                if ( i > max_fd )
+                {
+                    max_fd = i;
+                }
+
+                FD_SET(i, &fds);
+            }
+        }
+
+        select(max_fd + 1, &fds, NULL, NULL, NULL);
+
+        if ( FD_ISSET(ctrl_pipe, &fds) )
+        {
+			cmd_ctrl_pipe(ctrl_pipe, client_fds);
+        }
+
+		for (int i = 0; i < MAX_CLIENT_FD; ++i)
+		{
+			if ( client_fds[i] != NULL && FD_ISSET(i, &fds) )
+			{
+				int client_sd = accept(i, NULL, NULL);
+				
+				if ( client_sd != -1 )
+				{
+					int pid = fork();
+
+					if ( pid == 0 )
+					{
+						close(i);
+
+						vncterm_cmd(client_sd, 300, client_fds[i]->argc, 
+                                client_fds[i]->argv);
+					}
+
+					close(client_sd);
+				}
+			}
+		}
+    }
+}
+
+int main (int argc, char** argv)
+{
+	vncterm_server();
+
+    return 0;
+}
+
+
