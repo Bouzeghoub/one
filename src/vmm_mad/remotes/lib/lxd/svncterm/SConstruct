@@ -26,4 +26,6 @@ env = Environment()
 env['LIBS'] = ['-lvncserver', '-lnsl', '-lpthread', '-lz', '-ljpeg', 
     '-lutil', '-lgnutls']
 
+env['CFLAGS'] = ['-DGNU_SOURCE']
+
 env.Program('svncterm.c')
