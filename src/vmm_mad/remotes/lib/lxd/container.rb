@@ -275,13 +275,13 @@ class Container
         disk_name = "disk#{disk_element['DISK_ID']}"
 
         csrc = @lxc['devices'][disk_name]['source'].clone
-        csrc.slice!('/mapper')
 
-        ctgt = @lxc['devices'].delete(disk_name)['source']
+        @lxc['devices'].delete(disk_name)
 
         update
 
-        RAW.new.run('unmap', ctgt, csrc)
+        mapper = select_driver(disk_element)
+        mapper.run('unmap', csrc)
     end
 
     # Setup the disk by mapping/unmapping the disk device
