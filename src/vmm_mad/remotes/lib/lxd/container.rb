@@ -327,6 +327,9 @@ class Container
                 RAW.new
             when 'qcow2'
                 QCOW2.new
+            when ''
+                OpenNebula.log 'missing DRIVER field in VM template: trying raw image format'
+                RAW.new
             end
         when 'RBD'
             RBD.new(info['CEPH_USER'])
@@ -334,6 +337,7 @@ class Container
     end
 
     private
+
     # Waits or no for response depending on wait value
     def wait?(response, wait, timeout)
         @client.wait(response, timeout) unless wait == false
