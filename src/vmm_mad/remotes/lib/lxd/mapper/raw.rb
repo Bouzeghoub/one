@@ -33,7 +33,7 @@ class RAW < Mapper
     end
 
     def detect_parts(block)
-        kpartx('av', block)
+        super(block) unless kpartx('av', block) == ''
     end
 
     def hide_parts(block)
@@ -41,8 +41,6 @@ class RAW < Mapper
     end
 
     def get_parts(block)
-        return block if detect_parts(block) == ''
-
         parts = super(block)
         parts.each do |part|
             match = 'dev'

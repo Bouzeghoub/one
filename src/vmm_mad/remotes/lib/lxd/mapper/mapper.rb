@@ -93,9 +93,10 @@ class Mapper
     # Return an array of possibly unmountable partitions from block
     def detect_parts(block)
         command = `lsblk #{block} -f -J`
-        JSON.parse(command)['blockdevices'][0]['children']
+        #TODO: validate non-existing block
+        JSON.parse(command)['blockdevices'][0]['children'] 
     end
-
+    
     # Returns an array of mountable partitions from block
     def get_parts(block)
         parts = detect_parts(block)
