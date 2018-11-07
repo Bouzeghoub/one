@@ -306,7 +306,7 @@ class Container
             when 'FILE'
                 "#{ds_path}/#{ds_id}/#{vm_id}/disk.#{disk_id}"
             when 'RBD'
-                if disk_info['DISK_CLONE'] == 'YES'
+                if disk['DISK_CLONE'] == 'YES'
                     "#{disk['SOURCE']}-#{vm_id}-#{disk_id}"
                 else
                     disk['SOURCE']
