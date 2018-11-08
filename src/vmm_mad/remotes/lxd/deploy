@@ -54,9 +54,9 @@ if Container.exist?(container.name, client)
 
     raise LXDError, err_msg if container.status == 'Running'
 
-    container.config.update(config)
+    container.config = config
 
-    container.devices.update(devices)
+    container.devices = devices
 
     container.update
 else
