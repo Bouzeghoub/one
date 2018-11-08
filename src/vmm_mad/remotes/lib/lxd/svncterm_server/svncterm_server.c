@@ -2153,7 +2153,11 @@ int vncterm_cmd(int sd, int timeout, int width, int heigth,
 	int count = 0;
 
 	char buffer[1024];
-	int c;
+	
+    int c;
+    int rc, error;
+
+    socklen_t error_len = sizeof(int);
 
 	while(1)
 	{
@@ -2173,6 +2177,15 @@ int vncterm_cmd(int sd, int timeout, int width, int heigth,
 		}
 
 		rfbProcessEvents (vt->screen, 40000); /* 40 ms */
+
+        /* Check socket status */
+
+        rc = getsockopt(sd, SOL_SOCKET, SO_ERROR, &error, &error_len);
+
+        if (rc == -1 || (rc == 0 && error != 0)) // client socket closed or error
+        {
+            break;
+        }
 
 		if (vt->ibuf_count > 0) 
 		{
@@ -2208,9 +2221,9 @@ int vncterm_cmd(int sd, int timeout, int width, int heigth,
 		vncterm_puts(vt, buffer, c);
 	}
 
-	kill(pid, 9);
+    kill(pid, 9);
 
-	waitpid(pid, &status, 0);
+    waitpid(pid, &status, 0);
 
 	exit (0);
 }
