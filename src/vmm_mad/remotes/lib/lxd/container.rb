@@ -29,6 +29,7 @@ require 'rbd'
 # LXD Container abstraction
 #
 class Container
+
     #---------------------------------------------------------------------------
     # Class Constants API and Containers Paths
     #---------------------------------------------------------------------------
@@ -38,10 +39,10 @@ class Container
     #---------------------------------------------------------------------------
     # Methods to access container attributes
     #---------------------------------------------------------------------------
-    CONTAINER_ATTRIBUTES = %w{name status status_code devices config profile 
-        expanded_config expanded_devices architecture}.freeze
+    CONTAINER_ATTRIBUTES = %w[name status status_code devices config profile
+                              expanded_config expanded_devices architecture].freeze
 
-    CONTAINER_ATTRIBUTES.each { |attr|
+    CONTAINER_ATTRIBUTES.each do |attr|
         define_method(attr.to_sym) do
             @lxc[attr]
         end
@@ -49,7 +50,7 @@ class Container
         define_method("#{attr}=".to_sym) do |value|
             @lxc[attr] = value
         end
-    }
+    end
 
     # Return if this is a wild container. Needs the associated OpenNebulaVM
     # description
@@ -70,6 +71,7 @@ class Container
     end
 
     class << self
+
     # Returns specific container, by its name
     # Params:
     # +name+:: container name
@@ -86,8 +88,8 @@ class Container
 
     # Creates container from a OpenNebula VM xml description
     def new_from_xml(one_xml, client)
-        one = OpenNebulaVM.new(one_xml)  
-        
+        one = OpenNebulaVM.new(one_xml)
+
         Container.new(one.to_lxc, one, client)
     end
 
@@ -110,8 +112,10 @@ class Container
         true
     rescue LXDError => exception
         raise exception if exception.body['error_code'] != 404
+
         false
     end
+
     end
 
     #---------------------------------------------------------------------------
@@ -121,7 +125,7 @@ class Container
     def create(wait: true, timeout: '')
         @lxc['source'] = { 'type' => 'none' }
         wait?(@client.post(CONTAINERS, @lxc), wait, timeout)
-        
+
         @lxc = @client.get("#{CONTAINERS}/#{name}")['metadata']
     end
 
@@ -140,7 +144,7 @@ class Container
         @client.get("#{CONTAINERS}/#{name}/state")
     end
 
-    #Retreive metadata for the container
+    # Retreive metadata for the container
     def get_metadata
         @lxc = @client.get("#{CONTAINERS}/#{name}")['metadata']
     end
@@ -186,9 +190,9 @@ class Container
     end
 
     def detach_nic(mac)
-        @lxc['devices'].delete_if { |device, config|
+        @lxc['devices'].delete_if do |device, config|
             device.include?('eth') && config['hwaddr'] == mac
-        } 
+        end
 
         update
     end
@@ -196,9 +200,9 @@ class Container
     #---------------------------------------------------------------------------
     # Container Storage
     #---------------------------------------------------------------------------
-    # Sets up the container mounts for type: disk devices. 
+    # Sets up the container mounts for type: disk devices.
     def setup_storage(operation)
-        return if !@one
+        return unless @one
 
         @one.get_disks.each do |disk|
             setup_disk(disk, operation)
@@ -224,7 +228,7 @@ class Container
         update
     end
 
-    # Removes the context section from the LXD configuration and unmap the 
+    # Removes the context section from the LXD configuration and unmap the
     # context device
     def detach_context
         return unless @one.has_context?
@@ -240,11 +244,11 @@ class Container
     end
 
     # Attach disk to container (ATTACH = YES) in VM description
-    def attach_disk
+    def attach_disk(source = nil, path = nil)
         return unless @one
 
         disk_a = @one.get_disks.select do |disk|
-            disk['ATTACH'].upcase == 'YES'
+            disk['ATTACH'].casecmp('YES').zero?
         end
 
         disk_element = disk_a.first
@@ -253,7 +257,13 @@ class Container
 
         setup_disk(disk_element, 'map')
 
-        disk_hash = @one.disk(disk_element)
+        if source
+            source2 = source.dup
+            mapper_location = source2.index('/disk.')
+            source2.insert(mapper_location, '/mapper')
+        end
+
+        disk_hash = @one.disk(disk_element, source2, path)
 
         @lxc['devices'].update(disk_hash)
 
@@ -265,7 +275,7 @@ class Container
         return unless @one
 
         disk_a = @one.get_disks.select do |disk|
-            disk['ATTACH'].upcase == 'YES'
+            disk['ATTACH'].casecmp('YES').zero?
         end
 
         disk_element = disk_a.first
@@ -276,9 +286,13 @@ class Container
 
         csrc = @lxc['devices'][disk_name]['source'].clone
 
+        OpenNebula.log @lxc['devices']
+
         @lxc['devices'].delete(disk_name)
 
         update
+
+        OpenNebula.log @lxc['devices']
 
         mapper = select_driver(disk_element)
         mapper.run('unmap', csrc)
@@ -286,7 +300,7 @@ class Container
 
     # Setup the disk by mapping/unmapping the disk device
     def setup_disk(disk, operation)
-        return if !@one
+        return unless @one
 
         ds_path = @one.ds_path
         ds_id   = @one.sysds_id
@@ -303,15 +317,15 @@ class Container
         end
 
         source = case disk['TYPE']
-            when 'FILE'
-                "#{ds_path}/#{ds_id}/#{vm_id}/disk.#{disk_id}"
-            when 'RBD'
-                if disk['DISK_CLONE'] == 'YES'
-                    "#{disk['SOURCE']}-#{vm_id}-#{disk_id}"
-                else
-                    disk['SOURCE']
-                end
-        end
+                 when 'FILE'
+                     "#{ds_path}/#{ds_id}/#{vm_id}/disk.#{disk_id}"
+                 when 'RBD'
+                     if disk['DISK_CLONE'] == 'YES'
+                         "#{disk['SOURCE']}-#{vm_id}-#{disk_id}"
+                     else
+                         disk['SOURCE']
+                     end
+                 end
 
         mapper = select_driver(disk)
 
@@ -355,4 +369,5 @@ class Container
 
         status
     end
+
 end

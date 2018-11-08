@@ -19,8 +19,9 @@
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
 require 'container'
+require 'base64'
 
-require_relative '../../scripts_common' 
+require_relative '../../scripts_common'
 
 # ------------------------------------------------------------------------------
 # Action Arguments, STDIN includes XML description of the OpenNebula VM
@@ -32,10 +33,9 @@ disk_index = ARGV[3]
 xml64      = ARGV[4]
 vm_id      = ARGV[5]
 
-xml = STDIN.read
+xml = STDIN.read # TODO: Real xml is xml64, not required image path if this
 
 client    = LXDClient.new
 container = Container.get(vm_name, xml, client)
 
-container.attach_disk
-
+container.attach_disk(image_path)
