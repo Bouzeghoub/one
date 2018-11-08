@@ -22,6 +22,17 @@
 
      Author: Dietmar Maurer <dietmar@proxmox.com>
 
+     Copyright 2002-2018, OpenNebula Project, OpenNebula Systems
+
+     - This is a modification of the original svncterm program. The server
+     is control through a named pipe. This program is intended to use in 
+     conjuntion with the OpenNebula LXD driver.
+     - Adds an inetd like funcioanlity to handle client connections
+     - Simplify timeout managemnt
+     - Adds some specific options
+
+     contact@opennebula.systems
+
 */
 
 #include <stdio.h>
@@ -1732,11 +1743,9 @@ rfbBool CheckPasswordByList(rfbClientPtr cl,const char* response,int len) {
 /*                                                                            */
 /* -------------------------------------------------------------------------- */
 
-vncTerm * create_vncterm (int sd, int maxx, int maxy)
+vncTerm * create_vncterm (int sd, int maxx, int maxy, int *argc, char **argv)
 {
-	int i;
-
-	rfbScreenInfoPtr screen = rfbGetScreen (NULL, NULL, maxx, maxy, 8, 1, 1);
+	rfbScreenInfoPtr screen = rfbGetScreen (argc, argv, maxx, maxy, 8, 1, 1);
 
 	screen->frameBuffer = (char*) calloc(maxx*maxy, 1);
 
@@ -1746,7 +1755,7 @@ vncTerm * create_vncterm (int sd, int maxx, int maxy)
 
 	cmap->data.bytes = malloc (16*3);
 
-	for(i=0;i<16;i++) 
+	for(int i=0;i<16;i++) 
 	{
 		cmap->data.bytes[i*3 + 0] = default_red[color_table[i]];
 		cmap->data.bytes[i*3 + 1] = default_grn[color_table[i]];
@@ -1806,7 +1815,7 @@ vncTerm * create_vncterm (int sd, int maxx, int maxy)
 
 	vt->cells = (TextCell *)calloc(sizeof(TextCell), vt->width*vt->total_height);
 
-	for (i = 0; i < vt->width * vt->total_height; i++) 
+	for (int i = 0; i < vt->width * vt->total_height; i++) 
 	{
 		vt->cells[i].ch = ' ';
 		vt->cells[i].attrib = vt->default_attrib;
@@ -1846,10 +1855,13 @@ vncTerm * create_vncterm (int sd, int maxx, int maxy)
 static const char CTRL_PIPE_PATH[] = "/tmp/svncterm_server_pipe";
 #define MAX_CLIENT_FD 1024
 #define ARG_MAX 256
+#define PASSWD_MAX 256
 
 struct vncterm_command
 {
     int vnc_port;
+
+    char *passwd[3];
 
     int argc;
     char *argv[ARG_MAX];
@@ -1920,6 +1932,14 @@ void del_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
         for (int j = 0 ; j < client_fds[i]->argc ; ++j)
         {
             free(client_fds[i]->argv[j]);
+        }
+
+        for (int j = 1 ; j < 3 ; ++j)
+        {
+            if ( client_fds[i]->passwd[j] != NULL )
+            {
+                free(client_fds[i]->passwd[j]);
+            }
         }
 
         free(client_fds[i]);
@@ -2011,23 +2031,45 @@ void cmd_ctrl_pipe(int pipe_fd, struct vncterm_command ** client_fds)
     }
 
     char * token;
-    
+   
+    /* FIRST TOKEN: VNC PORT */
     vt_cmd = (struct vncterm_command *) malloc(sizeof(struct vncterm_command));
 
     token = strtok(cmd, " ");
 
     vt_cmd->vnc_port = atoi(token);
+    
+    /* SECOND TOKEN: PASSWD ( - if none ) */
+    token = strtok(NULL, " ");
 
-    for (i = 0; token != NULL && i < ARG_MAX - 1; ++i )
+    vt_cmd->passwd[0] = NULL;
+    vt_cmd->passwd[1] = NULL;
+    vt_cmd->passwd[2] = NULL;
+
+    if ( token != NULL )
     {
-        if ((token = strtok(NULL, " ")) != NULL)
+        if ( token[0] != '-' )
         {
-            vt_cmd->argv[i] = strdup(token);
+            vt_cmd->passwd[1] = strdup("-passwd");
+            vt_cmd->passwd[2] = strdup(token);
         }
-    }
 
-    vt_cmd->argv[i-1] = NULL;
-    vt_cmd->argc      = i-1;
+        for (i = 0; token != NULL && i < ARG_MAX - 1; ++i )
+        {
+            if ((token = strtok(NULL, " ")) != NULL)
+            {
+                vt_cmd->argv[i] = strdup(token);
+            }
+        }
+
+        vt_cmd->argv[i-1] = NULL;
+        vt_cmd->argc      = i-1;
+    }
+    else
+    {
+        vt_cmd->argv[0] = NULL;
+        vt_cmd->argc    = 0;
+    }
 
     if ( vt_cmd->vnc_port < 0 )
     {
@@ -2041,7 +2083,10 @@ void cmd_ctrl_pipe(int pipe_fd, struct vncterm_command ** client_fds)
     }
 }
 
-int vncterm_cmd(int sd, int timeout, int argc, char **argv)
+/* -------------------------------------------------------------------------- */
+
+int vncterm_cmd(int sd, int timeout, int width, int heigth, 
+        struct vncterm_command * vcmd)
 {
 #ifdef DEBUG
 	rfbLogEnable (1);
@@ -2055,7 +2100,19 @@ int vncterm_cmd(int sd, int timeout, int argc, char **argv)
 
 	struct winsize dimensions;
 
-	vncTerm *vt = create_vncterm(sd, 745, 400);
+    char **argv = NULL;
+    int argc    = 0;
+
+    int *argc_ptr = NULL;
+
+    if ( vcmd->passwd[1] != NULL )
+    {
+        argc = 3;
+        argv = vcmd->passwd;
+        argc_ptr = &argc;
+    }
+
+	vncTerm *vt = create_vncterm(sd, width, heigth, argc_ptr, argv);
 
 	setlocale(LC_ALL, ""); // set from environment
 
@@ -2085,7 +2142,7 @@ int vncterm_cmd(int sd, int timeout, int argc, char **argv)
 			signal(SIGTERM, SIG_DFL);
 			signal(SIGINT, SIG_DFL);
 
-			execvp(argv[0], argv);
+			execvp(vcmd->argv[0], vcmd->argv);
 			break;
 		default:
 			break;
@@ -2156,7 +2213,10 @@ int vncterm_cmd(int sd, int timeout, int argc, char **argv)
 	exit (0);
 }
 
-int vncterm_server()
+/* -------------------------------------------------------------------------- */
+/* Server Main loop, process pipe commands and client connectiosn             */
+/* -------------------------------------------------------------------------- */
+int vncterm_server(int timeout, int width, int height)
 {
     struct vncterm_command * client_fds[MAX_CLIENT_FD];
 
@@ -2182,6 +2242,7 @@ int vncterm_server()
         FD_ZERO(&fds);
 
         max_fd = ctrl_pipe;
+
         FD_SET(ctrl_pipe, &fds);
 
         for (int i = 0; i < MAX_CLIENT_FD; ++i)
@@ -2206,32 +2267,73 @@ int vncterm_server()
 
 		for (int i = 0; i < MAX_CLIENT_FD; ++i)
 		{
-			if ( client_fds[i] != NULL && FD_ISSET(i, &fds) )
-			{
-				int client_sd = accept(i, NULL, NULL);
-				
-				if ( client_sd != -1 )
-				{
-					int pid = fork();
+            if ( client_fds[i] == NULL || !FD_ISSET(i, &fds))
+            {
+                continue;
+            }
 
-					if ( pid == 0 )
-					{
-						close(i);
+            int client_sd = accept(i, NULL, NULL);
+            
+            if ( client_sd != -1 )
+            {
+                int pid = fork();
 
-						vncterm_cmd(client_sd, 300, client_fds[i]->argc, 
-                                client_fds[i]->argv);
-					}
+                if ( pid == 0 )
+                {
+                    close(i);
 
-					close(client_sd);
-				}
-			}
+                    vncterm_cmd(client_sd, timeout, width, height, client_fds[i]);
+                }
+
+                close(client_sd);
+            }
 		}
     }
 }
 
+/**
+ *  Main Program
+ */
 int main (int argc, char** argv)
 {
-	vncterm_server();
+    int width  = 800;
+    int height = 600;
+
+    int timeout_s = 300;
+
+    int opt;
+
+    while ((opt = getopt(argc, argv, "w:h:t:")) != -1) 
+    {
+        switch (opt)
+        {
+        case 'w':
+            width  = atoi(optarg);
+            break;
+        case 'h':
+            height = atoi(optarg);
+            break;
+        case 't':
+            timeout_s = atoi(optarg);
+            break;
+        default: /* '?' */
+            fprintf(stderr, "Usage: %s [-t nsecs] [-w width] [-h height]\n",
+                    argv[0]);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    if ( width <= 0 )
+    {
+        width = 800;
+    }
+
+    if ( height <= 0 )
+    {
+        height = 600;
+    }
+
+	vncterm_server(timeout_s, width, height);
 
     return 0;
 }
