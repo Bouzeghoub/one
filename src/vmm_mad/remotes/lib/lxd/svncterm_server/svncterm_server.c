@@ -2138,6 +2138,8 @@ int vncterm_cmd(int sd, int timeout, int width, int heigth,
 			exit(-1);
 
 		case 0:
+            close(sd);
+
 			signal(SIGQUIT, SIG_DFL);
 			signal(SIGTERM, SIG_DFL);
 			signal(SIGINT, SIG_DFL);
@@ -2291,6 +2293,12 @@ int vncterm_server(int timeout, int width, int height)
     }
 }
 
+void sigchld_handler(int signo) 
+{
+
+    waitpid(-1, NULL, 0);
+};
+
 /**
  *  Main Program
  */
@@ -2332,6 +2340,18 @@ int main (int argc, char** argv)
     {
         height = 600;
     }
+
+    struct sigaction act;
+
+    act.sa_handler = sigchld_handler;
+
+    sigemptyset(&act.sa_mask);
+
+    sigaddset(&act.sa_mask, SIGCHLD);
+
+    act.sa_flags = SA_RESTART;
+
+    sigaction(SIGCHLD, &act, NULL);
 
 	vncterm_server(timeout_s, width, height);
 
