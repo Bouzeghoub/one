@@ -761,7 +761,8 @@ VMM_EXEC_LXD_LIB="src/vmm_mad/remotes/lib/lxd/opennebula_vm.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/rbd.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/utils.rb \
                 src/vmm_mad/remotes/lib/lxd/client.rb \
-                src/vmm_mad/remotes/lib/lxd/container.rb"
+                src/vmm_mad/remotes/lib/lxd/container.rb \
+                src/vmm_mad/remotes/lib/lxd/svncterm_server/svncterm_server "
 
 #-------------------------------------------------------------------------------
 # VMM SH Driver KVM scripts, to be installed under $REMOTES_LOCATION/vmm/kvm
