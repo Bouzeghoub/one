@@ -313,6 +313,19 @@ class OpenNebulaVM
         mapped
     end
 
+    # Reads configuration values from
+    def read_conf
+        input = IO.read("#{__dir__}/lxd.conf") # TODO: Right path?
+        values = Hash[*input.delete('"').split(/\s*[\n=]\s*/)]
+
+        # TODO: make generated
+        @vnc_command = values['VNC_COMMAND']
+        @vnc_command = '/var/lib/one/datastores' if @vnc_command.empty?
+
+        @ds_path = values['DATASTORE_LOCATION']
+        @ds_path = '/var/lib/one/datastores' if @ds_path.empty?
+    end
+
 end
 
 # This class abstracts the access to XML elements. It provides basic methods

@@ -34,6 +34,7 @@ class Container
     # Class Constants API and Containers Paths
     #---------------------------------------------------------------------------
     CONTAINERS = 'containers'.freeze
+    # TODO: Move to lxd.conf
     CONTAINERS_PATH = '/var/lib/lxd/storage-pools/default/containers'.freeze
 
     #---------------------------------------------------------------------------
@@ -311,6 +312,7 @@ class Container
         disk_id = disk['DISK_ID']
 
         if disk_id == @one.rootfs_id
+            # TODO: Verify rootfs is empty
             target = "#{CONTAINERS_PATH}/#{vm_name}/rootfs"
         else
             target = "#{ds_path}/#{ds_id}/#{vm_id}/mapper/disk.#{disk_id}"
