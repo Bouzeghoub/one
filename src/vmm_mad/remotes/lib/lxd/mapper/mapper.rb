@@ -20,8 +20,6 @@ require 'fileutils'
 require 'json'
 require 'fstab'
 
-# TODO: multiple partitions
-
 # Mapping disks on the host
 class Mapper
 

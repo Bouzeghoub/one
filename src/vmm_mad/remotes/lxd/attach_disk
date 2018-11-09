@@ -19,7 +19,6 @@
 $LOAD_PATH.unshift File.dirname(__FILE__)
 
 require 'container'
-require 'base64'
 
 require_relative '../../scripts_common'
 
@@ -33,7 +32,7 @@ disk_index = ARGV[3]
 xml64      = ARGV[4]
 vm_id      = ARGV[5]
 
-xml = STDIN.read # TODO: Real xml is xml64, not required image path if this
+xml = STDIN.read
 
 client    = LXDClient.new
 container = Container.get(vm_name, xml, client)
