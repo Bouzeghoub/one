@@ -35,20 +35,14 @@ class OpenNebulaVM
 
         return if wild?
 
-        # Sets the Datastore Path for the Container disks
-        disk = @xml.element('//TEMPLATE/DISK')
-
-        if disk
-            source = disk['SOURCE']
-            ds_id = disk['DATASTORE_ID']
-
-            @ds_path = source.split("#{ds_id}/")[0].chomp
-        else
-            @ds_path = ''
-        end
+        read_conf
 
         # Sets the DISK ID of the root filesystem
-        @rootfs_id = '0'
+        disk = @xml.element('//TEMPLATE/DISK')
+
+        return unless disk
+
+        @rootfs_id = disk['DISK_ID']
         boot_order = @xml['//TEMPLATE/OS/BOOT']
         @rootfs_id = boot_order.split(',')[0][-1] unless boot_order.empty?
     end
