@@ -28,4 +28,4 @@ env['LIBS'] = ['-lvncserver', '-lnsl', '-lpthread', '-lz', '-ljpeg',
 
 env['CFLAGS'] = ['-D_GNU_SOURCE']
 
-env.Program('svncterm.c')
+env.Program('svncterm_server.c')
