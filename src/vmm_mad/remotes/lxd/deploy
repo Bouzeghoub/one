@@ -20,7 +20,7 @@ $LOAD_PATH.unshift File.dirname(__FILE__)
 
 require 'container'
 
-require_relative '../../scripts_common' 
+require_relative '../../scripts_common'
 
 # ------------------------------------------------------------------------------
 # Action Arguments, STDIN includes XML description of the OpenNebula VM
@@ -48,10 +48,9 @@ if Container.exist?(container.name, client)
     config  = container.config
     devices = container.devices
 
-    container.get_metadata 
+    container.get_metadata
 
-    err_msg   = 'A container with the same ID is already running'
-
+    err_msg = 'A container with the same ID is already running'
     raise LXDError, err_msg if container.status == 'Running'
 
     container.config = config
@@ -66,7 +65,7 @@ end
 # ------------------------------------------------------------------------------
 # Start the container, if not wild, maps storage to host directories
 # ------------------------------------------------------------------------------
-if container.wild? 
+if container.wild?
     container.start
 else
     container.setup_storage('map')
@@ -77,7 +76,7 @@ else
         container.setup_storage('unmap')
         container.delete
 
-        raise LXDError, container.status 
+        raise LXDError, container.status
     end
 end
 
@@ -85,10 +84,8 @@ end
 # Updates container configuration with the OpenNebulaVM description
 # ------------------------------------------------------------------------------
 container.config.update('user.xml' => xml)
-
 container.update
 
-#LXDriver.vnc(info)
+container.vnc
 
 puts container.name
-

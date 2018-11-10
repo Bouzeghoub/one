@@ -1,0 +1,6 @@
+VNC_COMMAND = bash
+VNC_WIDTH = 800
+VNC_HEIGHT = 600
+VNC_TIMEOUT = 300
+
+DATASTORE_LOCATION = /var/lib/one/datastores

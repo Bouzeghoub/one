@@ -353,7 +353,39 @@ class Container
         end
     end
 
+    def vnc
+        command = @one.vnc_command
+        return if command.nil?
+
+        defaulter = lambda {|value, key|
+            vnc_arg = @one.lxdrc[key]
+            vnc_arg ||= value
+        }
+
+        w = defaulter.call('800', 'VNC_WIDTH')
+        h = defaulter.call('600', 'VNC_HEIGTH')
+        t = defaulter.call('300', 'VNC_TIMEOUT')
+
+        vnc_args = "-w #{w} -h #{h} -t #{t}"
+
+        bin = 'svncterm_server'
+        server = "#{__dir__}/#{bin} #{vnc_args}"
+
+        Process.detach(spawn(server)) unless running?(bin)
+
+        `#{command}`
+    end
+
     private
+
+    # Return an array of pids matching the command or nil if not found
+    def running?(command)
+        pids = `ps -C #{command} | grep -w #{command} | awk '{print $1}'`
+        pids = pids.chomp("\n").split("\n")
+        return pids unless pids.empty?
+
+        nil
+    end
 
     # Waits or no for response depending on wait value
     def wait?(response, wait, timeout)

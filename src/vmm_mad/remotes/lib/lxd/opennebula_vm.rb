@@ -18,7 +18,7 @@ require 'rexml/document'
 # This class parses and wraps the information in the Driver action data
 class OpenNebulaVM
 
-    attr_reader :xml, :vm_id, :vm_name, :sysds_id, :ds_path, :rootfs_id
+    attr_reader :xml, :vm_id, :vm_name, :sysds_id, :ds_path, :rootfs_id, :lxdrc
 
     #---------------------------------------------------------------------------
     # Class Constructor
@@ -35,7 +35,10 @@ class OpenNebulaVM
 
         return if wild?
 
-        read_conf
+        # Loof for system datastore path
+        @lxdrc = read_conf
+        @ds_path = @lxdrc['DATASTORE_LOCATION']
+        @ds_path ||= '/var/lib/one/datastores'
 
         # Sets the DISK ID of the root filesystem
         disk = @xml.element('//TEMPLATE/DISK')
@@ -286,6 +289,23 @@ class OpenNebulaVM
         end
     end
 
+    # Creates container vnc connection
+    def vnc_command
+        data = @xml.element('//TEMPLATE/GRAPHICS')
+        return unless data
+        return if data['TYPE'] != 'VNC'
+
+        pass = data['PASSWD']
+        pass = '-' if pass == ''
+
+        pipe = '/tmp/svncterm_server_pipe'
+
+        command = @lxdrc['VNC_COMMAND']
+        command ||= 'bash'
+
+        "echo \"#{data['PORT']} #{pass} lxc exec #{@vm_name} #{command}\" > #{pipe}"
+    end
+
     private
 
     # Maps IO limits from an OpenNebula VM configuration to a LXD configuration
@@ -310,17 +330,13 @@ class OpenNebulaVM
         mapped
     end
 
-    # Reads configuration values from
+    # Read lxdrc
     def read_conf
-        input = IO.read("#{__dir__}/lxd.conf") # TODO: Right path?
-        values = Hash[*input.delete('"').split(/\s*[\n=]\s*/)]
+        config_file = "#{__dir__}/../../etc/vmm/lxd/lxdrc"
+        return {} unless File.file?(config_file)
 
-        # TODO: make generated
-        @vnc_command = values['VNC_COMMAND']
-        @vnc_command = '/var/lib/one/datastores' if @vnc_command.empty?
-
-        @ds_path = values['DATASTORE_LOCATION']
-        @ds_path = '/var/lib/one/datastores' if @ds_path.empty?
+        input = IO.read(config_file)
+        Hash[*input.delete('"').split(/\s*[\n=]\s*/)]
     end
 
 end
