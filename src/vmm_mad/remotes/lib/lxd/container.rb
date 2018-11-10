@@ -25,17 +25,14 @@ require 'opennebula_vm'
 require 'raw'
 require 'qcow2'
 require 'rbd'
-#
-# LXD Container abstraction
-#
+
+# This class interacts with the LXD container on REST level
 class Container
 
     #---------------------------------------------------------------------------
     # Class Constants API and Containers Paths
     #---------------------------------------------------------------------------
     CONTAINERS = 'containers'.freeze
-    # TODO: Move to lxd.conf
-    CONTAINERS_PATH = '/var/lib/lxd/storage-pools/default/containers'.freeze
 
     #---------------------------------------------------------------------------
     # Methods to access container attributes
@@ -69,6 +66,10 @@ class Container
 
         @lxc = lxc
         @one = one
+
+        #TODO: use defaulter
+        @containers_path = @one.lxdrc['CONTAINERS']
+        @containers_path ||= '/var/lib/lxd/storage-pools/default/containers'
     end
 
     class << self
@@ -313,7 +314,7 @@ class Container
 
         if disk_id == @one.rootfs_id
             # TODO: Verify rootfs is empty
-            target = "#{CONTAINERS_PATH}/#{vm_name}/rootfs"
+            target = "#{@containers_path}/#{vm_name}/rootfs"
         else
             target = "#{ds_path}/#{ds_id}/#{vm_id}/mapper/disk.#{disk_id}"
         end
@@ -357,6 +358,7 @@ class Container
         command = @one.vnc_command
         return if command.nil?
 
+        # TODO: Create function on openvm
         defaulter = lambda {|value, key|
             vnc_arg = @one.lxdrc[key]
             vnc_arg ||= value

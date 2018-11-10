@@ -35,7 +35,7 @@ class OpenNebulaVM
 
         return if wild?
 
-        # Loof for system datastore path
+        # Loof for atastores path
         @lxdrc = read_conf
         @ds_path = @lxdrc['DATASTORE_LOCATION']
         @ds_path ||= '/var/lib/one/datastores'

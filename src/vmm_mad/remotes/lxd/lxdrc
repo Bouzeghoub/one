@@ -4,3 +4,4 @@ VNC_HEIGHT = 600
 VNC_TIMEOUT = 300
 
 DATASTORE_LOCATION = /var/lib/one/datastores
+CONTAINERS = /var/lib/lxd/storage-pools/default/containers
