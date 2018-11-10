@@ -431,7 +431,7 @@ INSTALL_FILES=(
     VMM_EXEC_LXD_SCRIPTS:$VAR_LOCATION/remotes/vmm/lxd
     VMM_EXEC_LXD_LIB:$VAR_LOCATION/remotes/vmm/lxd
     VMM_EXEC_ETC_KVM_SCRIPTS:$VAR_LOCATION/remotes/etc/vmm/kvm
-    VMM_EXEC_ETC_KVM_SCRIPTS:$VAR_LOCATION/remotes/etc/vmm/kvm
+    VMM_EXEC_ETC_LXD_SCRIPTS:$VAR_LOCATION/remotes/etc/vmm/lxd
     VMM_EXEC_VCENTER_SCRIPTS:$VAR_LOCATION/remotes/vmm/vcenter
     VMM_EXEC_EC2_SCRIPTS:$VAR_LOCATION/remotes/vmm/ec2
     VMM_EXEC_AZ_SCRIPTS:$VAR_LOCATION/remotes/vmm/az
@@ -763,6 +763,12 @@ VMM_EXEC_LXD_LIB="src/vmm_mad/remotes/lib/lxd/opennebula_vm.rb \
                 src/vmm_mad/remotes/lib/lxd/client.rb \
                 src/vmm_mad/remotes/lib/lxd/container.rb \
                 src/vmm_mad/remotes/lib/lxd/svncterm_server/svncterm_server "
+
+#-------------------------------------------------------------------------------
+# VMM configuration LXD scripts, to be installed under $REMOTES_LOCATION/etc/vmm/lxd
+#-------------------------------------------------------------------------------
+
+VMM_EXEC_ETC_LXD_SCRIPTS="src/vmm_mad/remotes/lxd/lxdrc"
 
 #-------------------------------------------------------------------------------
 # VMM SH Driver KVM scripts, to be installed under $REMOTES_LOCATION/vmm/kvm
