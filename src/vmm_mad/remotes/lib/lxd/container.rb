@@ -344,7 +344,8 @@ class Container
             when 'qcow2'
                 QCOW2.new
             when ''
-                OpenNebula.log 'missing DRIVER field in VM template: trying raw image format'
+                log = 'Missing DRIVER field in VM template: trying raw image'
+                OpenNebula.log log
                 RAW.new
             end
         when 'RBD'

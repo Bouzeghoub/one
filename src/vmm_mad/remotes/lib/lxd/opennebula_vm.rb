@@ -280,9 +280,6 @@ class OpenNebulaVM
         hash['profiles'] = [profile]
     end
 
-    #---------------------------------------------------------------------------
-    # Container Mapping: Extra Configuration & Profiles
-    #---------------------------------------------------------------------------
     def device_info(devices, key, filter)
         devices.each do |device|
             return device[key] if device[key].value?(filter)
