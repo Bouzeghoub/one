@@ -16,6 +16,29 @@
 require 'rexml/document'
 require 'yaml'
 
+# This class reads and holds configuration attributes for the LXD driver
+class LXDConfiguration < Hash
+        DEFAULT_CONFIGURATION = {
+        :vnc => {
+          :command => '/bin/bash',
+          :width   => '800',
+          :height  => '600',
+          :timeout => '300'
+        },
+        :datastore_location => '/var/lib/one/datastores',
+        :containers         => '/var/lib/lxd/storage-pools/default/containers'
+    }
+
+    def initialize
+        self.replace(DEFAULT_CONFIGURATION)
+
+        begin
+            self.merge!(YAML.load_file("#{__dir__}/../../etc/vmm/lxd/lxdrc"))
+        rescue
+        end
+    end
+end
+
 # This class parses and wraps the information in the Driver action data
 class OpenNebulaVM
 
@@ -36,10 +59,10 @@ class OpenNebulaVM
 
         return if wild?
 
-        # Loof for atastores path
-        @lxdrc = read_conf
-        @ds_path = @lxdrc['datastore_location']
-        @ds_path ||= '/var/lib/one/datastores'
+        # Load Driver configuration
+        @lxdrc = LXDConfiguration.new
+
+        @ds_path = @lxdrc[:datastore_location]
 
         # Sets the DISK ID of the root filesystem
         disk = @xml.element('//TEMPLATE/DISK')
@@ -303,7 +326,7 @@ class OpenNebulaVM
         pipe = '/tmp/svncterm_server_pipe'
 
         if signal == 'start'
-            command = @lxdrc['vnc']['command']
+            command = @lxdrc[:vnc][:command]
             command ||= 'bash'
             "echo \"#{data['PORT']} #{pass} lxc exec #{@vm_name} #{command}\" > #{pipe}"
         elsif signal == 'stop'
@@ -334,16 +357,6 @@ class OpenNebulaVM
 
         mapped
     end
-
-    # Read lxdrc
-    def read_conf
-        config_file = "#{__dir__}/../../etc/vmm/lxd/lxdrc"
-
-        return {} unless File.file?(config_file)
-
-        YAML.load_file(config_file)
-    end
-
 end
 
 # This class abstracts the access to XML elements. It provides basic methods
