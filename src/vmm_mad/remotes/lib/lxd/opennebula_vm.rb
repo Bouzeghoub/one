@@ -306,7 +306,7 @@ class OpenNebulaVM
             command ||= 'bash'
             "echo \"#{data['PORT']} #{pass} lxc exec #{@vm_name} #{command}\" > #{pipe}"
         elsif signal == 'stop'
-            "echo - \"#{data['PORT']}\" > #{pipe}"
+            "echo -\"#{data['PORT']}\" > #{pipe}"
         end
     end
 
