@@ -157,7 +157,7 @@ class OpenNebulaVM
         disks = @xml.elements('//TEMPLATE/DISK')
 
         disks.each do |n|
-            hash.update(disk(n))
+            hash.update(disk(n, nil, nil))
         end
 
         context(hash)
@@ -179,7 +179,7 @@ class OpenNebulaVM
     end
 
     # Creates a disk hash from DISK xml element
-    def disk(info, source = nil, path = nil)
+    def disk(info, source, path)
         disk_id = info['DISK_ID']
         disk    = {}
 

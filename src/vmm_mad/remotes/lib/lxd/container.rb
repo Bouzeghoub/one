@@ -246,7 +246,7 @@ class Container
     end
 
     # Attach disk to container (ATTACH = YES) in VM description
-    def attach_disk(source = nil, path = nil)
+    def attach_disk(source)
         return unless @one
 
         disk_a = @one.get_disks.select do |disk|
@@ -259,13 +259,13 @@ class Container
 
         setup_disk(disk_element, 'map')
 
+        source2 = source.dup
         if source
-            source2 = source.dup
             mapper_location = source2.index('/disk.')
             source2.insert(mapper_location, '/mapper')
         end
 
-        disk_hash = @one.disk(disk_element, source2, path)
+        disk_hash = @one.disk(disk_element, source2, nil)
 
         @lxc['devices'].update(disk_hash)
 
@@ -288,13 +288,9 @@ class Container
 
         csrc = @lxc['devices'][disk_name]['source'].clone
 
-        OpenNebula.log @lxc['devices']
-
         @lxc['devices'].delete(disk_name)
 
         update
-
-        OpenNebula.log @lxc['devices']
 
         mapper = select_driver(disk_element)
         mapper.run('unmap', csrc)
@@ -344,7 +340,7 @@ class Container
                 RAW.new
             when 'qcow2'
                 QCOW2.new
-            when ''
+            else
                 log = 'Missing DRIVER field in VM template: trying raw image'
                 OpenNebula.log log
                 RAW.new
