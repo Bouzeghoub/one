@@ -67,7 +67,7 @@ class Container
         @lxc = lxc
         @one = one
 
-        #TODO: use defaulter
+        # TODO: use defaulter
         @containers_path = @one.lxdrc['CONTAINERS']
         @containers_path ||= '/var/lib/lxd/storage-pools/default/containers'
     end
@@ -354,8 +354,9 @@ class Container
         end
     end
 
-    def vnc
-        command = @one.vnc_command
+    # Start the svncterm server if it is down.
+    def vnc(signal)
+        command = @one.vnc_command(signal)
         return if command.nil?
 
         # TODO: Create function on openvm

@@ -290,7 +290,8 @@ class OpenNebulaVM
     end
 
     # Creates container vnc connection
-    def vnc_command
+    # Creates or closes a connection to a container rfb port depending on signal
+    def vnc_command(signal)
         data = @xml.element('//TEMPLATE/GRAPHICS')
         return unless data
         return if data['TYPE'] != 'VNC'
@@ -300,10 +301,13 @@ class OpenNebulaVM
 
         pipe = '/tmp/svncterm_server_pipe'
 
-        command = @lxdrc['VNC_COMMAND']
-        command ||= 'bash'
-
-        "echo \"#{data['PORT']} #{pass} lxc exec #{@vm_name} #{command}\" > #{pipe}"
+        if signal == 'start'
+            command = @lxdrc['VNC_COMMAND']
+            command ||= 'bash'
+            "echo \"#{data['PORT']} #{pass} lxc exec #{@vm_name} #{command}\" > #{pipe}"
+        elsif signal == 'stop'
+            "echo - \"#{data['PORT']}\" > #{pipe}"
+        end
     end
 
     private

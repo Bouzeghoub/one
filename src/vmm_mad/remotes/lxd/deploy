@@ -86,6 +86,6 @@ end
 container.config.update('user.xml' => xml)
 container.update
 
-container.vnc
+container.vnc('start')
 
 puts container.name

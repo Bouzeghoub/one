@@ -50,6 +50,7 @@ if !container.wild?
         raise e
     end
 
+    container.vnc('stop')
     container.delete
 end
 
