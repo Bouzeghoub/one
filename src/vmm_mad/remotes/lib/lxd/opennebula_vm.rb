@@ -14,6 +14,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 require 'rexml/document'
+require 'yaml'
 
 # This class parses and wraps the information in the Driver action data
 class OpenNebulaVM
@@ -37,7 +38,7 @@ class OpenNebulaVM
 
         # Loof for atastores path
         @lxdrc = read_conf
-        @ds_path = @lxdrc['DATASTORE_LOCATION']
+        @ds_path = @lxdrc['datastore_location']
         @ds_path ||= '/var/lib/one/datastores'
 
         # Sets the DISK ID of the root filesystem
@@ -302,7 +303,7 @@ class OpenNebulaVM
         pipe = '/tmp/svncterm_server_pipe'
 
         if signal == 'start'
-            command = @lxdrc['VNC_COMMAND']
+            command = @lxdrc['vnc']['command']
             command ||= 'bash'
             "echo \"#{data['PORT']} #{pass} lxc exec #{@vm_name} #{command}\" > #{pipe}"
         elsif signal == 'stop'
@@ -337,11 +338,10 @@ class OpenNebulaVM
     # Read lxdrc
     def read_conf
         config_file = "#{__dir__}/../../etc/vmm/lxd/lxdrc"
+
         return {} unless File.file?(config_file)
 
-        input = IO.read(config_file)
-        # TODO: YAML
-        Hash[*input.delete('"').split(/\s*[\n=]\s*/)]
+        YAML.load_file(config_file)
     end
 
 end

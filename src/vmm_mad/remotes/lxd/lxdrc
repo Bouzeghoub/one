@@ -1,7 +1,7 @@
-VNC_COMMAND = bash
-VNC_WIDTH = 800
-VNC_HEIGHT = 600
-VNC_TIMEOUT = 300
-
-DATASTORE_LOCATION = /var/lib/one/datastores
-CONTAINERS = /var/lib/lxd/storage-pools/default/containers
+vnc:
+  command: bash
+  width: 800
+  height: 600
+  timeout: 300
+datastore_location: /var/lib/one/datastores
+containers: /var/lib/lxd/storage-pools/default/containers

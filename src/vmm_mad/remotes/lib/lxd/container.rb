@@ -66,7 +66,6 @@ class Container
 
         @lxc = lxc
         @one = one
-
     end
 
     class << self
@@ -307,7 +306,7 @@ class Container
 
         if disk_id == @one.rootfs_id
             # TODO: Verify rootfs is empty
-            target = "#{@one.lxdrc['CONTAINERS']}/#{vm_name}/rootfs"
+            target = "#{@one.lxdrc['containers']}/#{vm_name}/rootfs"
         else
             target = "#{ds_path}/#{ds_id}/#{vm_id}/mapper/disk.#{disk_id}"
         end
@@ -352,15 +351,14 @@ class Container
         command = @one.vnc_command(signal)
         return if command.nil?
 
-        # TODO: Create function on openvm
         defaulter = lambda {|value, key|
-            vnc_arg = @one.lxdrc[key]
+            vnc_arg = @one.lxdrc['vnc'][key]
             vnc_arg ||= value
         }
 
-        w = defaulter.call('800', 'VNC_WIDTH')
-        h = defaulter.call('600', 'VNC_HEIGTH')
-        t = defaulter.call('300', 'VNC_TIMEOUT')
+        w = defaulter.call('800', 'width')
+        h = defaulter.call('600', 'heigth')
+        t = defaulter.call('300', 'timeout')
 
         vnc_args = "-w #{w} -h #{h} -t #{t}"
 
