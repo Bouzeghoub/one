@@ -67,9 +67,6 @@ class Container
         @lxc = lxc
         @one = one
 
-        # TODO: use defaulter
-        @containers_path = @one.lxdrc['CONTAINERS']
-        @containers_path ||= '/var/lib/lxd/storage-pools/default/containers'
     end
 
     class << self
@@ -310,7 +307,7 @@ class Container
 
         if disk_id == @one.rootfs_id
             # TODO: Verify rootfs is empty
-            target = "#{@containers_path}/#{vm_name}/rootfs"
+            target = "#{@one.lxdrc['CONTAINERS']}/#{vm_name}/rootfs"
         else
             target = "#{ds_path}/#{ds_id}/#{vm_id}/mapper/disk.#{disk_id}"
         end

@@ -340,6 +340,7 @@ class OpenNebulaVM
         return {} unless File.file?(config_file)
 
         input = IO.read(config_file)
+        # TODO: YAML
         Hash[*input.delete('"').split(/\s*[\n=]\s*/)]
     end
 
