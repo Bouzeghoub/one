@@ -20,7 +20,7 @@ $LOAD_PATH.unshift File.dirname(__FILE__)
 
 require 'container'
 
-require_relative '../../scripts_common' 
+require_relative '../../scripts_common'
 
 # ------------------------------------------------------------------------------
 # Action Arguments, STDIN includes XML description of the OpenNebula VM
@@ -39,4 +39,5 @@ if iso_path != ''
     container = Container.get(vm_name, xml, client)
 
     container.attach_context
+    container.exec('one-contextd local 2>/dev/null')
 end
