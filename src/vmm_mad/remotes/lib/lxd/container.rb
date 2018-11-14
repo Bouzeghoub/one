@@ -147,6 +147,10 @@ class Container
         @lxc = @client.get("#{CONTAINERS}/#{name}")['metadata']
     end
 
+    # Runs command inside container
+    def exec(command)
+        `lxc exec #{name} #{command}`
+    end
     #---------------------------------------------------------------------------
     # Contianer Status Control
     #---------------------------------------------------------------------------
