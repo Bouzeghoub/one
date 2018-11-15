@@ -151,6 +151,7 @@ class Container
     def exec(command)
         `lxc exec #{name} #{command}`
     end
+
     #---------------------------------------------------------------------------
     # Contianer Status Control
     #---------------------------------------------------------------------------
@@ -265,7 +266,7 @@ class Container
         update
     end
 
-    # Detects disk being hotplugged 
+    # Detects disk being hotplugged
     def hotplug_disk
         return unless @one
 
@@ -293,6 +294,60 @@ class Container
         mapper.run('unmap', csrc)
     end
 
+    def resize_disk(disk_id, size)
+        raise 'Work in progress'
+
+        mountpoint = container.image_path(disk_id)
+        image_path = mountpoint.dup
+        image_path.slice!('/mapper')
+
+        disk = container.get_disk_by_id(disk_id)
+        OpenNebula.log disk
+        raise 'stop'
+
+        # class ModMapper < Mapper
+
+        #     def detect(path, container)
+        #         block = super(path)
+        #         return super(container.rootfs_mount) unless block.include? '/dev'
+
+        #         block
+        #     end
+
+        # end
+
+        # mapper = ModMapper.new
+        # block = mapper.detect(mountpoint, container)
+        mapper = RAW.new
+        block = mapper.map(image_path)
+
+        OpenNebula.log image_path
+        OpenNebula.log block
+        raise 'stop'
+
+        resize(image_path, size)
+        extend(block, 'ext4')
+
+        mapper.unmap(block)
+    end
+
+    # TODO: Add multipart support
+    def grow_image(image_path, size)
+        `truncate -s #{size}M #{image_path}`
+    end
+
+    # TODO: add xfs support
+    # TODO: create format detection function
+    def grow_filesystem(block, format)
+        case format
+        when 'ext4'
+            `sudo e2fsck -f -y #{block} && sudo resize2fs #{block}`
+        else
+            OpenNebula.log "format #{format} not supported"
+            exit 1
+        end
+        raise 'Resize failed' unless $CHILD_STATUS.exitstatus.zero?
+    end
 
     def rootfs_mount
         "#{@one.lxdrc['containers']}/#{name}/rootfs"

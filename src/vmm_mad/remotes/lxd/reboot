@@ -20,7 +20,7 @@ $LOAD_PATH.unshift File.dirname(__FILE__)
 
 require 'container'
 
-require_relative '../../scripts_common' 
+require_relative '../../scripts_common'
 
 # ------------------------------------------------------------------------------
 # Action Arguments, STDIN includes XML description of the OpenNebula VM
@@ -40,6 +40,3 @@ else
 end
 
 container.start
-
-#LXDriver.vnc(LXDriver::XML.new(container.config['user.xml']))
-
