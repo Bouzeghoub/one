@@ -247,14 +247,7 @@ class Container
 
     # Attach disk to container (ATTACH = YES) in VM description
     def attach_disk(source)
-        return unless @one
-
-        disk_a = @one.get_disks.select do |disk|
-            disk['ATTACH'].casecmp('YES').zero?
-        end
-
-        disk_element = disk_a.first
-
+        disk_element = hotplug_disk
         return unless disk_element
 
         setup_disk(disk_element, 'map')
@@ -272,16 +265,20 @@ class Container
         update
     end
 
-    # Detach disk to container (ATTACH = YES) in VM description
-    def detach_disk
+    # Detects disk being hotplugged 
+    def hotplug_disk
         return unless @one
 
         disk_a = @one.get_disks.select do |disk|
             disk['ATTACH'].casecmp('YES').zero?
         end
 
-        disk_element = disk_a.first
+        disk_a.first
+    end
 
+    # Detach disk to container (ATTACH = YES) in VM description
+    def detach_disk
+        disk_element = hotplug_disk
         return unless disk_element
 
         disk_name = "disk#{disk_element['DISK_ID']}"
@@ -296,6 +293,18 @@ class Container
         mapper.run('unmap', csrc)
     end
 
+
+    def rootfs_mount
+        "#{@one.lxdrc['containers']}/#{name}/rootfs"
+    end
+
+    # Returns the image file path
+    def image_path(disk_id)
+        @lxc['devices']["disk#{disk_id}"]['source']
+    rescue StandardError
+        @one.disk_mountpoint(disk_id)
+    end
+
     # Setup the disk by mapping/unmapping the disk device
     def setup_disk(disk, operation)
         return unless @one
@@ -304,17 +313,15 @@ class Container
         ds_id   = @one.sysds_id
 
         vm_id   = @one.vm_id
-        vm_name = @one.vm_name
-
         disk_id = disk['DISK_ID']
 
         if disk_id == @one.rootfs_id
-            # TODO: Verify rootfs is empty
-            target = "#{@one.lxdrc['containers']}/#{vm_name}/rootfs"
+            target = rootfs_mount
         else
-            target = "#{ds_path}/#{ds_id}/#{vm_id}/mapper/disk.#{disk_id}"
+            target = @one.disk_mountpoint(disk_id)
         end
 
+        # TODO: Verify target is empty
         source = case disk['TYPE']
                  when 'FILE'
                      "#{ds_path}/#{ds_id}/#{vm_id}/disk.#{disk_id}"

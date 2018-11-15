@@ -100,18 +100,18 @@ class OpenNebulaVM
     #---------------------------------------------------------------------------
     # Get nic by mac
     def get_nic_by_mac(mac)
-        nics = @xml.elements('//TEMPLATE/NIC')
-
-        nics.each do |n|
+        get_nics.each do |n|
             return n if n['MAC'] == mac
         end
     end
 
+    def get_nics
+        @xml.elements('//TEMPLATE/NIC')
+    end
+
     # Sets up the network interfaces configuration in devices
     def network(hash)
-        nics = @xml.elements('//TEMPLATE/NIC')
-
-        nics.each do |n|
+        get_nics.each do |n|
             hash.update(nic(n))
         end
     end
@@ -141,11 +141,19 @@ class OpenNebulaVM
     # Container Device Mapping: Storage
     #---------------------------------------------------------------------------
     # Get disk by target
-    def get_disk_by_target(target)
-        disks = @xml.elements('//TEMPLATE/DISK')
+    def get_disk_by_target(value)
+        get_disk_by('TARGET', value)
+    end
 
-        disks.each do |n|
-            return n if n['TARGET'] == target
+    # Get disk by id
+    def get_disk_by_id(value)
+        get_disk_by('DISK_ID', value)
+    end
+
+    # Get a disk depending on the filter xml key and the matching value
+    def get_disks_by(filter, value)
+        get_disks.each do |n|
+            return n if n[filter] == value
         end
     end
 
@@ -179,6 +187,10 @@ class OpenNebulaVM
         }
     end
 
+    def disk_mountpoint(disk_id)
+        "#{@ds_path}/#{@sysds_id}/#{@vm_id}/mapper/disk.#{disk_id}"
+    end
+
     # Creates a disk hash from DISK xml element
     def disk(info, source, path)
         disk_id = info['DISK_ID']
@@ -191,7 +203,7 @@ class OpenNebulaVM
             disk_name = 'root'
             disk = { 'type' => 'disk', 'path' => '/', 'pool' => 'default' }
         else
-            source ||= "#{@ds_path}/#{@sysds_id}/#{@vm_id}/mapper/disk.#{disk_id}"
+            source ||= disk_mountpoint(disk_id)
 
             unless path
                 path = info['TARGET']
