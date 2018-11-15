@@ -266,6 +266,7 @@ VAR_DIRS="$VAR_LOCATION/remotes \
           $VAR_LOCATION/remotes/etc/im/kvm-probes.d \
           $VAR_LOCATION/remotes/etc/im/lxd-probes.d \
           $VAR_LOCATION/remotes/etc/vmm/kvm \
+          $VAR_LOCATION/remotes/etc/vmm/lxd \
           $VAR_LOCATION/remotes/etc/vnm \
           $VAR_LOCATION/remotes/im \
           $VAR_LOCATION/remotes/im/kvm.d \
@@ -759,7 +760,6 @@ VMM_EXEC_LXD_LIB="src/vmm_mad/remotes/lib/lxd/opennebula_vm.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/qcow2.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/raw.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/rbd.rb \
-                src/vmm_mad/remotes/lib/lxd/mapper/utils.rb \
                 src/vmm_mad/remotes/lib/lxd/client.rb \
                 src/vmm_mad/remotes/lib/lxd/container.rb \
                 src/vmm_mad/remotes/lib/lxd/svncterm_server/svncterm_server "

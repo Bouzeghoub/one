@@ -417,14 +417,9 @@ class Container
         command = @one.vnc_command(signal)
         return if command.nil?
 
-        defaulter = lambda {|value, key|
-            vnc_arg = @one.lxdrc['vnc'][key]
-            vnc_arg ||= value
-        }
-
-        w = defaulter.call('800', 'width')
-        h = defaulter.call('600', 'heigth')
-        t = defaulter.call('300', 'timeout')
+        w = @one.lxdrc[:vnc][:width]
+        h = @one.lxdrc[:vnc][:heigth]
+        t = @one.lxdrc[:vnc][:timeout]
 
         vnc_args = "-w #{w} -h #{h} -t #{t}"
 
@@ -440,11 +435,7 @@ class Container
 
     # Return an array of pids matching the command or nil if not found
     def running?(command)
-        pids = `ps -C #{command} | grep -w #{command} | awk '{print $1}'`
-        pids = pids.chomp("\n").split("\n")
-        return pids unless pids.empty?
-
-        nil
+        !`ps  --noheaders -C #{command}`.empty?
     end
 
     # Waits or no for response depending on wait value

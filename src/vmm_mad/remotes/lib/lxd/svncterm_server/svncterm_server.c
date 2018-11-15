@@ -1867,6 +1867,24 @@ struct vncterm_command
     char *argv[ARG_MAX];
 };
 
+void free_vncterm_command(struct vncterm_command * cmd)
+{
+    for (int j = 0 ; j < cmd->argc && j < ARG_MAX; ++j)
+    {
+        free(cmd->argv[j]);
+    }
+
+    for (int j = 1 ; j < 3 ; ++j)
+    {
+        if ( cmd->passwd[j] != NULL )
+        {
+            free(cmd->passwd[j]);
+        }
+    }
+
+    free(cmd);
+}
+
 /**
  *  Opens the CTRL_PIPE of the server and returns its file descriptor.
  *  If the pipe does not exist it attempts to create it.
@@ -1929,20 +1947,7 @@ void del_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
 
         close(i);
 
-        for (int j = 0 ; j < client_fds[i]->argc ; ++j)
-        {
-            free(client_fds[i]->argv[j]);
-        }
-
-        for (int j = 1 ; j < 3 ; ++j)
-        {
-            if ( client_fds[i]->passwd[j] != NULL )
-            {
-                free(client_fds[i]->passwd[j]);
-            }
-        }
-
-        free(client_fds[i]);
+        free_vncterm_command(client_fds[i]);
         
         client_fds[i] = NULL;
 
@@ -1953,7 +1958,7 @@ void del_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
 /**
  *  Opens a TCP socket and binds it to the given vnc_port.
  */
-void add_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
+int add_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
 {
     struct addrinfo hints;
     struct addrinfo *results;
@@ -1974,28 +1979,31 @@ void add_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
 
     if (rc != 0)
     {
-        return;
+        return -1;
     }
 
     int sd = socket(results->ai_family, results->ai_socktype, results->ai_protocol);
 
     if ( sd > MAX_CLIENT_FD )
     {
+        freeaddrinfo(results);
         close(sd);
-        return;
+        return -1;
     }
 
 	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(int)) < 0) 
 	{
+        freeaddrinfo(results);
 		close(sd);
-		return;
+		return -1;
     }
 
 
     if ( bind(sd, results->ai_addr, results->ai_addrlen) != 0 )
     {
+        freeaddrinfo(results);
         close(sd);
-        return;
+        return -1;
     }
 
     freeaddrinfo(results);
@@ -2003,7 +2011,7 @@ void add_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
     if ( listen(sd, 5) != 0 )
     {
         close(sd);
-        return;
+        return -1;
     }
 
     client_fds[sd] = cmd;
@@ -2011,25 +2019,34 @@ void add_cmd(struct vncterm_command * cmd, struct vncterm_command ** client_fds)
 
 void cmd_ctrl_pipe(int pipe_fd, struct vncterm_command ** client_fds)
 {
-    char cmd[256];
-    int  i;
-
     struct vncterm_command * vt_cmd;
-    
-    int rb = read(pipe_fd, cmd, 255);
 
-    cmd[rb]='\0';
+    char cmd[256];
+    char c='\0';
 
-    if ( rb <= 1 )
+    int  i = 0;
+    int  rb;
+
+    do 
+    {
+        rb = read(pipe_fd, &c, sizeof(char));
+
+        if ( rb != 1 || c == '\n' )
+        {
+            break;
+        }
+
+        cmd[i++] = c;
+
+    } while (1);
+
+    cmd[i+1]='\0';
+
+    if ( i <= 1 )
     {
         return;
     }
     
-    if ( cmd[rb-1] == '\n' )
-    {
-        cmd[rb-1] = '\0';
-    }
-
     char * token;
    
     /* FIRST TOKEN: VNC PORT */
@@ -2076,10 +2093,15 @@ void cmd_ctrl_pipe(int pipe_fd, struct vncterm_command ** client_fds)
         vt_cmd->vnc_port = -vt_cmd->vnc_port;
 
         del_cmd(vt_cmd, client_fds);
+
+        free_vncterm_command(vt_cmd);
     }
     else if ( vt_cmd->vnc_port > 0 )
     {
-        add_cmd(vt_cmd, client_fds);
+        if ( add_cmd(vt_cmd, client_fds) == -1 )
+        {
+            free_vncterm_command(vt_cmd);
+        }
     }
 }
 
@@ -2298,6 +2320,8 @@ int vncterm_server(int timeout, int width, int height)
                     close(i);
 
                     vncterm_cmd(client_sd, timeout, width, height, client_fds[i]);
+
+                    exit(0);
                 }
 
                 close(client_sd);
