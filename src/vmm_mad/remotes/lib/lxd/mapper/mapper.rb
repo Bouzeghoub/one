@@ -28,19 +28,20 @@ class Mapper
 
     # TODO: validate mounts with unmaps
     def mount(block, path)
-        shell("sudo mount #{block} #{path} 2>/dev/null")
+        mount_simple(block, path)
     rescue StandardError
-        if partition?(block)
-            raise "cannot mount partition #{block}"
-        end
+        raise "cannot mount partition #{block}" if partition?(block)
 
         parts = get_parts(block)
 
-        if parts == block
-            unmap(block)
-            raise "cannot mount device #{block}"
-        end
-        parts
+        return multimap(parts, path) unless parts == block
+
+        unmap(block)
+        raise "cannot mount device #{block}"
+    end
+
+    def mount_simple(block, path)
+        shell("sudo mount #{block} #{path} 2>/dev/null")
     end
 
     def umount(path)
@@ -54,19 +55,26 @@ class Mapper
 
     # TODO: mount fstab on container rootfs
     # TODO: seize root part on container rootfs, multimap dir
-    def detect_fstab(partition)
-        FileUtils.mkdir_p TMP_FSTAB
-        mount(partition, TMP_FSTAB)
+    def detect_fstab(parts, directory)
+        fstab = nil
 
-        fstab = false
-        path = TMP_FSTAB + '/etc/fstab'
-        begin
-            fstab = Fstab.new(path) if File.file?(path)
-        rescue StandardError => exception
-            umount(TMP_FSTAB) # TODO: improve dup umount
-            raise exception
+        parts.each do |part|
+            mount_simple(part['name'], directory)
+            cp("#{directory}/etc/fstab", TMP_FSTAB, true)
+
+            begin
+                # TODO: Validate fstab is an fstab
+                fstab = Fstab.new(TMP_FSTAB)
+            rescue StandardError => exception
+                umount(directory)
+                raise exception
+            end
+
+            break fstab if fstab
+
+            umount(directory)
         end
-        umount(TMP_FSTAB)
+
         fstab
     end
 
@@ -85,8 +93,30 @@ class Mapper
         mounts
     end
 
-    # TODO: sort partitions based on '/' count
-    def sort_parts(parts, order); end
+    def sort_mounts(mounts, invert)
+        parts = []
+        paths = []
+        mounts.each do |key, value|
+            if value == '/'
+                parts.prepend(key)
+                paths.prepend(value)
+            else
+                value.slice!(-1) if value[-1] == '/'
+                root = value.count('/')
+                parts.insert(root, key)
+                paths.insert(root, value)
+            end
+        end
+
+        [parts, paths].each {|array| array.delete_if {|mount| mount.nil? } }
+
+        sorted = {}
+        0.upto(paths.length - 1) {|i| sorted[parts[i]] = paths[i] }
+
+        return sorted unless invert
+
+        Hash[sorted.to_a.reverse]
+    end
 
     # Return an array of possibly unmountable partitions from block
     def detect_parts(block)
@@ -113,17 +143,15 @@ class Mapper
         partition.insert(-1, device_id)
     end
 
-    def multimap(partitions, directory)
-        fstab = nil
-        partitions.each do |part|
-            fstab = detect_fstab(part['name'])
-            break fstab if fstab
-        end
+    def multimap(parts, directory)
+        fstab = detect_fstab(parts, directory)
 
-        # TODO: ensure correct mount order counting / instances
-        mounts = parse_fstab(fstab, partitions)
+        mounts = parse_fstab(fstab, parts)
+        mounts = sort_mounts(mounts, false)
         mounts.each do |part, dest|
-            mount(part, directory + dest)
+            next if dest == '/'
+
+            mount_simple(part, directory + dest)
         end
     end
 
@@ -131,13 +159,13 @@ class Mapper
         get_parent_device(device) # part becomes dev
         parts = get_parts(device)
 
-        cp("#{directory}/etc/fstab", TMP_FSTAB, 'sudo')
-        fstab = Fstab.new("#{TMP_FSTAB}/fstab")
+        cp("#{directory}/etc/fstab", TMP_FSTAB, true)
+        fstab = Fstab.new(TMP_FSTAB)
 
         mounts = parse_fstab(fstab, parts)
-        mounts = mounts.to_a.reverse.to_h
-        mounts.each_key do |part|
-            umount(part)
+        mounts = sort_mounts(mounts, true)
+        mounts.each do |_part, dest|
+            umount(directory + dest)
         end
 
         unmap(device)
@@ -149,26 +177,20 @@ class Mapper
         when 'map'
             device = map(disk)
             mkdir(directory)
-
-            parts = mount(device, directory)
-            multimap(parts, directory) if parts.class == Array
+            mount(device, directory)
         when 'unmap'
             device = detect(directory)
-            if device == ''
-                STDERR.puts "#{directory} has no associated device"
-                return
-            end
-            if partition?(device)
-                multiunmap(device, directory)
-            else
-                umount(directory)
-                unmap(device)
-            end
+            return STDERR.puts "#{directory} has no associated device" if device == ''
+
+            return multiunmap(device, directory) if partition?(device)
+
+            umount(directory)
+            unmap(device)
         end
     end
 
-    def cp(src, dst, sudo = '')
-        sudo = 'sudo' if sudo != ''
+    def cp(src, dst, sudo = false)
+        sudo = 'sudo' if sudo == true
         `#{sudo} cp #{src} #{dst}`
     end
 
