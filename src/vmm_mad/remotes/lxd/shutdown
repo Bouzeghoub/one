@@ -20,7 +20,7 @@ $LOAD_PATH.unshift File.dirname(__FILE__)
 
 require 'container'
 
-require_relative '../../scripts_common' 
+require_relative '../../scripts_common'
 
 # ------------------------------------------------------------------------------
 # Action Arguments, STDIN includes XML description of the OpenNebula VM
@@ -50,7 +50,8 @@ if !container.wild?
         raise e
     end
 
-    container.vnc('stop')
     container.delete
+
 end
 
+container.vnc('stop')
