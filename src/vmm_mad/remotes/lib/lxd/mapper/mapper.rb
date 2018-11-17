@@ -25,6 +25,8 @@ class Mapper
 
     FILTER = /\d+p\d+\b/
     TMP_FSTAB = '/tmp/one-fstab'
+    # TODO: Add shell command wrapper, with optional redir, sudo, chomp, etc.
+    BASH_NIL = '> /dev/null 2>&1'
 
     # TODO: validate mounts with unmaps
     def mount(block, path)
@@ -41,7 +43,8 @@ class Mapper
     end
 
     def mount_simple(block, path)
-        shell("sudo mount #{block} #{path} 2>/dev/null")
+        mkdir(path)
+        shell("sudo mount #{block} #{path} #{BASH_NIL}")
     end
 
     def umount(path)
@@ -53,8 +56,21 @@ class Mapper
         `sudo df -h #{path} | grep /dev | awk '{print $1}'`.chomp("\n")
     end
 
-    # TODO: mount fstab on container rootfs
-    # TODO: seize root part on container rootfs, multimap dir
+    def resize(block, directory, fs_format)
+        # TODO: Add commands to oneadmin sudo conf
+        case fs_format
+        when 'ext4'
+            `sudo e2fsck -f -y #{block} #{BASH_NIL}; sudo resize2fs #{block} #{BASH_NIL}`
+        when 'xfs'
+            mount_simple(block, directory)
+            `sudo xfs_growfs -d #{directory} #{BASH_NIL}`
+            umount(directory)
+        else
+            STDERR.puts "format #{fs_format} not supported"
+            exit 1
+        end
+    end
+
     def detect_fstab(parts, directory)
         fstab = nil
 
@@ -176,7 +192,10 @@ class Mapper
         case action
         when 'map'
             device = map(disk)
-            mkdir(directory)
+
+            fs_format = get_format(device)
+            resize(device, directory, fs_format)
+
             mount(device, directory)
         when 'unmap'
             device = detect(directory)
@@ -204,8 +223,11 @@ class Mapper
         FILTER.match? device
     end
 
-    def format(block, file_system)
-        shell("sudo mkfs.#{file_system} #{block}")
+    def get_format(block)
+        fs_format = `lsblk -f #{block} | grep -w #{block.split('/dev/')[-1]} | awk  \'{print $2}\'`.chomp
+        return fs_format if fs_format != '' # takes a bit
+
+        get_format(block)
     end
 
     def shell(command)

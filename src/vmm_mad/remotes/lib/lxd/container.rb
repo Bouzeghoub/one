@@ -295,60 +295,39 @@ class Container
     end
 
     def resize_disk(disk_id, size)
-        raise 'Work in progress'
+        STDERR.puts 'work in progress'
+        raise 'stop'
 
-        mountpoint = container.image_path(disk_id)
+        mountpoint = image_path(disk_id)
+
         image_path = mountpoint.dup
         image_path.slice!('/mapper')
 
         disk = container.get_disk_by_id(disk_id)
-        OpenNebula.log disk
-        raise 'stop'
 
-        # class ModMapper < Mapper
+        mapper = select_driver(disk)
 
-        #     def detect(path, container)
-        #         block = super(path)
-        #         return super(container.rootfs_mount) unless block.include? '/dev'
+        block = mapper.detect(mountpoint)
+        block = mapper.detect(container.rootfs_mount) unless block.include? '/dev'
 
-        #         block
-        #     end
-
-        # end
-
-        # mapper = ModMapper.new
-        # block = mapper.detect(mountpoint, container)
-        mapper = RAW.new
         block = mapper.map(image_path)
 
         OpenNebula.log image_path
         OpenNebula.log block
         raise 'stop'
 
-        resize(image_path, size)
-        extend(block, 'ext4')
+        greow_image(image_path, size)
+        grow_filesystem(block, 'ext4')
 
         mapper.unmap(block)
     end
 
-    # TODO: Add multipart support
+    # TODO: Check rbd growth
     def grow_image(image_path, size)
         `truncate -s #{size}M #{image_path}`
     end
 
-    # TODO: add xfs support
-    # TODO: create format detection function
-    def grow_filesystem(block, format)
-        case format
-        when 'ext4'
-            `sudo e2fsck -f -y #{block} && sudo resize2fs #{block}`
-        else
-            OpenNebula.log "format #{format} not supported"
-            exit 1
-        end
-        raise 'Resize failed' unless $CHILD_STATUS.exitstatus.zero?
-    end
-
+    # Returns container rootfs mountpoint
     def rootfs_mount
         "#{@one.lxdrc['containers']}/#{name}/rootfs"
     end
