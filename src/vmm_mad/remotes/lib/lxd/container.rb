@@ -329,7 +329,7 @@ class Container
 
     # Returns container rootfs mountpoint
     def rootfs_mount
-        "#{@one.lxdrc['containers']}/#{name}/rootfs"
+        "#{@one.lxdrc[:containers]}/#{name}/rootfs"
     end
 
     # Returns the image file path
