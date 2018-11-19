@@ -56,8 +56,8 @@ class Mapper
         `sudo df -h #{path} | grep /dev | awk '{print $1}'`.chomp("\n")
     end
 
+    # Extends a block device depending on the filesystem
     def resize(block, directory, fs_format)
-        # TODO: Add commands to oneadmin sudo conf
         case fs_format
         when 'ext4'
             `sudo e2fsck -f -y #{block} #{BASH_NIL}; sudo resize2fs #{block} #{BASH_NIL}`
@@ -71,6 +71,9 @@ class Mapper
         end
     end
 
+    # Returns the fstab object from an array of partitions. These partitions should belong
+    # to the same partition table. Each parition will be mounted in +directory+ until it is found
+    # in one of them a file in directory/etc/fstab
     def detect_fstab(parts, directory)
         fstab = nil
 
@@ -109,10 +112,11 @@ class Mapper
         mounts
     end
 
-    def sort_mounts(mounts, invert)
+    # Returns the partitions sorted by / ocurrences in the mountpoints. Can be inverted
+    def sort_mounts(partitions, invert)
         parts = []
         paths = []
-        mounts.each do |key, value|
+        partitions.each do |key, value|
             if value == '/'
                 parts.prepend(key)
                 paths.prepend(value)
@@ -159,6 +163,7 @@ class Mapper
         partition.insert(-1, device_id)
     end
 
+    # Returns the partitions of the block device and mounts them in directory, according to their fstab
     def multimap(parts, directory)
         fstab = detect_fstab(parts, directory)
 
@@ -171,6 +176,7 @@ class Mapper
         end
     end
 
+    # Umounts the partitions of a block device and finally unmaps de block
     def multiunmap(device, directory)
         get_parent_device(device) # part becomes dev
         parts = get_parts(device)
@@ -223,9 +229,10 @@ class Mapper
         FILTER.match? device
     end
 
+    # Returns the filesystem type of a block device
     def get_format(block)
         fs_format = `lsblk -f #{block} | grep -w #{block.split('/dev/')[-1]} | awk  \'{print $2}\'`.chomp
-        return fs_format if fs_format != '' # takes a bit
+        return fs_format if fs_format != '' # Linux takes a bit to prepare the info
 
         get_format(block)
     end
