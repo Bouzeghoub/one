@@ -366,7 +366,7 @@ public:
      */
     static string shared_db_version()
     {
-        return "5.6.0";
+        return "5.7.80";
     }
 
     /**
@@ -375,7 +375,7 @@ public:
      */
     static string local_db_version()
     {
-        return "5.6.0";
+        return "5.7.80";
     }
 
     /**
@@ -458,7 +458,7 @@ public:
     {
         if ( uid != -1 )
         {
-            User * user = upool->get(uid);
+            User * user = upool->get_ro(uid);
 
             if ( user == 0 )
             {
@@ -481,7 +481,7 @@ public:
             user->unlock();
         }
 
-        Group * group = gpool->get(gid);
+        Group * group = gpool->get_ro(gid);
 
         if ( group == 0 )
         {

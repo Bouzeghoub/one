@@ -4,6 +4,7 @@ link_logo:
 text_link_logo:
 confirm_vms: false
 filter-view: true
+do_count_animation: true
 enabled_tabs:
     - dashboard-tab
     - instances-top-tab
@@ -394,6 +395,7 @@ tabs:
             VM.snapshot_delete: false
             VM.disk_snapshot_create: false
             VM.disk_snapshot_revert: false
+            VM.disk_snapshot_rename: false
             VM.disk_snapshot_delete: false
             VM.resched: false
             VM.unresched: false
@@ -403,6 +405,7 @@ tabs:
             VM.unlock: true
             VM.edit_labels: true
             VM.menu_labels: true
+        autorefresh_info: 5000 # ms
     oneflow-services-tab:
         panel_tabs:
             service_info_tab: true

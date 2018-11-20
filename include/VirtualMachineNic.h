@@ -95,6 +95,12 @@ public:
      */
     int release_network_leases(int vmid);
 
+    /**
+     *  Marshall disk attributes in XML format with just essential information
+     *    @param stream to write the disk XML description
+     */
+    void to_xml_short(std::ostringstream& oss) const;
+
 private:
     /**
      *  Fills the authorization request for this NIC based on the VNET and SG
@@ -250,6 +256,9 @@ public:
             VectorAttribute * nic_default, std::vector<VectorAttribute *>& sgs,
             std::string& estr);
 
+    int get_auto_network_leases(int vm_id, int uid, VectorAttribute * nic_default, 
+            vector<VectorAttribute*>& sgs, std::string& error_str);
+
     /**
      *  Release all the network leases and SG associated to the set
      *    @param vmid of the VM
@@ -298,12 +307,11 @@ public:
     int set_up_attach_nic(int vmid, int uid, int cluster_id,
         VectorAttribute * vnic, VectorAttribute * nic_default,
         vector<VectorAttribute*>& sgs, std::string& error_str);
-
-
-
-
-
-
+    /**
+     *  Marshall NICs in XML format with just essential information
+     *    @param xml string to write the NIC XML description
+     */
+    std::string& to_xml_short(std::string& xml);
 
 protected:
 

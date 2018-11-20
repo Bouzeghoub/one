@@ -29,7 +29,8 @@
 usage() {
  echo
  echo "Usage: install.sh [-u install_user] [-g install_group] [-k keep conf]"
- echo "                  [-d ONE_LOCATION] [-c cli|ec2] [-r] [-h]"
+ echo "                  [-d ONE_LOCATION] [-c cli|ec2] [-r]"
+ echo "                  [-s] [-p] [-G] [-f] [-l] [-e] [-h]"
  echo
  echo "-u: user that will run opennebula, defaults to user executing install.sh"
  echo "-g: group of the user that will run opennebula, defaults to user"
@@ -42,8 +43,8 @@ usage() {
  echo "-c: install client utilities: OpenNebula cli and ec2 client files"
  echo "-s: install OpenNebula Sunstone"
  echo "-p: do not install OpenNebula Sunstone non-minified files"
- echo "-G: install OpenNebula Gate"
- echo "-f: install OpenNebula Flow"
+ echo "-G: install only OpenNebula Gate"
+ echo "-f: install only OpenNebula Flow"
  echo "-r: remove Opennebula, only useful if -d was not specified, otherwise"
  echo "    rm -rf \$ONE_LOCATION would do the job"
  echo "-l: creates symlinks instead of copying files, useful for development"
@@ -52,20 +53,12 @@ usage() {
 }
 #-------------------------------------------------------------------------------
 
-PARAMETERS="ehkrlcspou:g:d:"
+PARAMETERS=":u:g:d:ehkrlcsporlfG"
 
-if [ $(getopt --version | tr -d " ") = "--" ]; then
-    TEMP_OPT=`getopt $PARAMETERS "$@"`
-else
-    TEMP_OPT=`getopt -o $PARAMETERS -n 'install.sh' -- "$@"`
-fi
-
-if [ $? != 0 ] ; then
+if [ $# = 0 ] ; then
     usage
     exit 1
 fi
-
-eval set -- "$TEMP_OPT"
 
 INSTALL_ETC="yes"
 UNINSTALL="no"
@@ -80,25 +73,26 @@ ONEADMIN_GROUP=`id -g`
 SRC_DIR=$PWD
 DOCKER_MACHINE="no"
 
-while true ; do
-    case "$1" in
-        -e) DOCKER_MACHINE="yes"   ; shift ;;
-        -h) usage; exit 0;;
-        -k) INSTALL_ETC="no"   ; shift ;;
-        -r) UNINSTALL="yes"   ; shift ;;
-        -l) LINK="yes" ; shift ;;
-        -c) CLIENT="yes"; INSTALL_ETC="no" ; shift ;;
-        -G) ONEGATE="yes"; shift ;;
-        -s) SUNSTONE="yes"; shift ;;
-        -p) SUNSTONE_DEV="no"; shift ;;
-        -f) ONEFLOW="yes"; shift ;;
-        -u) ONEADMIN_USER="$2" ; shift 2;;
-        -g) ONEADMIN_GROUP="$2"; shift 2;;
-        -d) ROOT="$2" ; shift 2 ;;
-        --) shift ; break ;;
-        *)  usage; exit 1 ;;
+while getopts $PARAMETERS opt 
+do
+    case $opt in
+        e) DOCKER_MACHINE="yes" ;;
+        h) usage; exit 0;;
+        k) INSTALL_ETC="no" ;;
+        r) UNINSTALL="yes" ;;
+        l) LINK="yes" ;;
+        c) CLIENT="yes"; INSTALL_ETC="no" ;;
+        G) ONEGATE="yes" ;;
+        s) SUNSTONE="yes" ;;
+        p) SUNSTONE_DEV="no" ;;
+        f) ONEFLOW="yes" ;;
+        u) ONEADMIN_USER="$OPTARG" ;;
+        g) ONEADMIN_GROUP="$OPTARG" ;;
+        d) ROOT="$OPTARG" ;;
+        \?) usage; exit 1 ;;
     esac
 done
+shift $(($OPTIND - 1))
 
 #-------------------------------------------------------------------------------
 # Definition of locations
@@ -267,6 +261,7 @@ VAR_DIRS="$VAR_LOCATION/remotes \
           $VAR_LOCATION/remotes/etc/im/lxd-probes.d \
           $VAR_LOCATION/remotes/etc/vmm/kvm \
           $VAR_LOCATION/remotes/etc/vmm/lxd \
+          $VAR_LOCATION/remotes/etc/vmm/vcenter \
           $VAR_LOCATION/remotes/etc/vnm \
           $VAR_LOCATION/remotes/im \
           $VAR_LOCATION/remotes/im/kvm.d \
@@ -434,6 +429,7 @@ INSTALL_FILES=(
     VMM_EXEC_ETC_KVM_SCRIPTS:$VAR_LOCATION/remotes/etc/vmm/kvm
     VMM_EXEC_ETC_LXD_SCRIPTS:$VAR_LOCATION/remotes/etc/vmm/lxd
     VMM_EXEC_VCENTER_SCRIPTS:$VAR_LOCATION/remotes/vmm/vcenter
+    VMM_EXEC_ETC_VCENTER_SCRIPTS:$VAR_LOCATION/remotes/etc/vmm/vcenter
     VMM_EXEC_EC2_SCRIPTS:$VAR_LOCATION/remotes/vmm/ec2
     VMM_EXEC_AZ_SCRIPTS:$VAR_LOCATION/remotes/vmm/az
     VMM_EXEC_ONE_SCRIPTS:$VAR_LOCATION/remotes/vmm/one
@@ -827,6 +823,12 @@ VMM_EXEC_VCENTER_SCRIPTS="src/vmm_mad/remotes/vcenter/cancel \
                          src/vmm_mad/remotes/vcenter/preconfigure \
                          src/vmm_mad/remotes/vcenter/prereconfigure"
 
+#-------------------------------------------------------------------------------
+# VMM configuration VCENTER scripts, to be installed under $REMOTES_LOCATION/etc/vmm/vcenter
+#-------------------------------------------------------------------------------
+
+VMM_EXEC_ETC_VCENTER_SCRIPTS="src/vmm_mad/remotes/vcenter/vcenterc"
+
 #------------------------------------------------------------------------------
 # VMM Driver EC2 scripts, to be installed under $REMOTES_LOCATION/vmm/ec2
 #------------------------------------------------------------------------------
@@ -1042,6 +1044,7 @@ NETWORK_ETC_FILES="src/vnm_mad/remotes/OpenNebulaNetwork.conf"
 # IPAM drivers to be installed under $REMOTES_LOCATION/ipam
 #-------------------------------------------------------------------------------
 IPAM_DRIVER_DUMMY_SCRIPTS="src/ipamm_mad/remotes/dummy/register_address_range \
+               src/ipamm_mad/remotes/dummy/unregister_address_range \
                src/ipamm_mad/remotes/dummy/allocate_address \
                src/ipamm_mad/remotes/dummy/get_address \
                src/ipamm_mad/remotes/dummy/free_address"
@@ -1379,7 +1382,8 @@ ONEDB_SHARED_MIGRATOR_FILES="src/onedb/shared/2.0_to_2.9.80.rb \
                              src/onedb/shared/5.3.80_to_5.4.0.rb \
                              src/onedb/shared/5.4.0_to_5.4.1.rb \
                              src/onedb/shared/5.4.1_to_5.5.80.rb \
-                             src/onedb/shared/5.5.80_to_5.6.0.rb"
+                             src/onedb/shared/5.5.80_to_5.6.0.rb \
+                             src/onedb/shared/5.6.0_to_5.7.80.rb"
 
 ONEDB_LOCAL_MIGRATOR_FILES="src/onedb/local/4.5.80_to_4.7.80.rb \
                             src/onedb/local/4.7.80_to_4.9.80.rb \
@@ -1393,7 +1397,7 @@ ONEDB_LOCAL_MIGRATOR_FILES="src/onedb/local/4.5.80_to_4.7.80.rb \
                             src/onedb/local/5.4.0_to_5.4.1.rb \
                             src/onedb/local/5.4.1_to_5.5.80.rb \
                             src/onedb/local/5.5.80_to_5.6.0.rb \
-                            src/onedb/local/5.6.0_to_5.7.8.rb"
+                            src/onedb/local/5.6.0_to_5.7.80.rb"
 
 ONEDB_PATCH_FILES="src/onedb/patches/4.14_monitoring.rb \
                    src/onedb/patches/history_times.rb"

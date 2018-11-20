@@ -91,6 +91,7 @@
                 <xs:complexType>
                   <xs:sequence>
                     <xs:any minOccurs="0" maxOccurs="unbounded" processContents="skip"/>
+                    <xs:element name="BRIDGE_TYPE" type="xs:string"/>
                     <xs:element name="VCENTER_INSTANCE_ID" type="xs:string" minOccurs="0" maxOccurs="1"/>
                     <xs:element name="VCENTER_NET_REF" type="xs:string" minOccurs="0" maxOccurs="1"/>
                     <xs:element name="VCENTER_PORTGROUP_TYPE" type="xs:string" minOccurs="0" maxOccurs="1"/>
@@ -181,6 +182,7 @@
                       RECOVER_ACTION          = 42
                       RETRY_ACTION            = 43
                       MONITOR_ACTION          = 44
+                      DISK_SNAPSHOT_RENAME_ACTION = 45
                     -->
                     <xs:element name="ACTION" type="xs:integer"/>
                     <xs:element name="UID" type="xs:integer"/>
