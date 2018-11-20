@@ -397,7 +397,7 @@ class Container
         return if command.nil?
 
         w = @one.lxdrc[:vnc][:width]
-        h = @one.lxdrc[:vnc][:heigth]
+        h = @one.lxdrc[:vnc][:height]
         t = @one.lxdrc[:vnc][:timeout]
 
         vnc_args = "-w #{w} -h #{h} -t #{t}"
