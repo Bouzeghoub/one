@@ -2253,26 +2253,18 @@ int vncterm_cmd(int sd, int timeout, int width, int heigth,
 /* -------------------------------------------------------------------------- */
 /* Server Main loop, process pipe commands and client connectiosn             */
 /* -------------------------------------------------------------------------- */
-int vncterm_server(int timeout, int width, int height)
+int vncterm_server(int ctrl_pipe, int timeout, int width, int height)
 {
     struct vncterm_command * client_fds[MAX_CLIENT_FD];
 
     fd_set fds;
     int max_fd;
 
-    int ctrl_pipe;
-
     for (int i = 0 ; i < MAX_CLIENT_FD ; ++i)
     {
         client_fds[i] = NULL;
     }
 
-    ctrl_pipe = init_ctrl_pipe();
-
-    if ( ctrl_pipe == -1 )
-    {
-        return -1;
-    }
 
     while(1)
     {
@@ -2390,7 +2382,29 @@ int main (int argc, char** argv)
 
     sigaction(SIGCHLD, &act, NULL);
 
-	vncterm_server(timeout_s, width, height);
+    int ctrl_pipe = init_ctrl_pipe();
+
+    if ( ctrl_pipe == -1 )
+    {
+        return -1;
+    }
+
+    pid_t pid = fork();
+
+    switch(pid)
+    {
+        case -1:
+            return -1;
+
+        case 0:
+            setsid();
+            vncterm_server(ctrl_pipe, timeout_s, width, height);
+            return 0;
+
+        default:
+            close(ctrl_pipe);
+            break;
+    }
 
     return 0;
 }

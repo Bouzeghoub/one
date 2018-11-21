@@ -25,6 +25,7 @@ require 'opennebula_vm'
 require 'raw'
 require 'qcow2'
 require 'rbd'
+require 'open3'
 
 # This class interacts with the LXD container on REST level
 class Container
@@ -405,7 +406,7 @@ class Container
         bin = 'svncterm_server'
         server = "#{__dir__}/#{bin} #{vnc_args}"
 
-        Process.detach(spawn(server)) unless running?(bin)
+        Open3.popen3("#{server}") {|i, o, e, t| rc = t.value } unless running?(bin)
 
         `#{command}`
     end
