@@ -27,6 +27,66 @@ require 'qcow2'
 require 'rbd'
 require 'open3'
 
+# This module can be used to execute commands. It wraps popen3 and provides
+# locking capabilites using flock
+module Command
+    def self.execute(cmd, block)
+        rc = -1
+        stdout = ''
+        stderr = ''
+
+        begin
+            fd = lock if block
+
+            Open3.popen3(cmd) { |i, o, e, t| 
+                rc = t.value 
+
+                stdout = o.read
+                stderr = e.read
+
+                o.close
+                e.close
+            }
+        rescue
+
+        ensure
+            unlock(fd) if block
+        end
+
+        [rc, stdout, stderr]
+    end
+
+    def self.execute_once(cmd, lock)
+        execute(cmd, lock) unless running?(bin)
+    end
+
+    def self.lxc_execute(cmd, lxd_id)
+
+        cmd = "lxc exec #{lxd_id} #{cmd}"
+
+    end
+
+    # Return true if command is running
+    def running?(command)
+        !`ps  --noheaders -C #{command}`.empty?
+    end
+
+    private
+
+    LOCK_FILE = '/tmp/onelxd-lock'
+
+    def self.lock
+        lfd = File.open(LOCK_FILE,"w")
+        lfd.flock(File::LOCK_EX)
+
+        return lfd
+    end
+
+    def self.unlock(lfd)
+        lfd.close
+    end
+end
+
 # This class interacts with the LXD container on REST level
 class Container
 
