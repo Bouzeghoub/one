@@ -2389,6 +2389,14 @@ int main (int argc, char** argv)
         return -1;
     }
 
+    int fd = open("/dev/null", O_RDWR);
+
+    dup2(fd,0);
+    dup2(fd,1);
+    dup2(fd,2);
+
+    close(fd);
+
     pid_t pid = fork();
 
     switch(pid)
