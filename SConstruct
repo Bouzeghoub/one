@@ -268,7 +268,7 @@ pre_build_scripts = [
     'src/im_mad/collectd',
     'src/client',
     'src/docker_machine',
-    'src/vmm_mad/remotes/lib/lxd/svncterm_server'
+    'src/svncterm_server'
 ]
 
 build_scripts = []
