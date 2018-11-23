@@ -68,7 +68,8 @@ public:
         UNDEFINED           = 0,
         LINUX               = 1,
         OPENVSWITCH         = 2,
-        VCENTER_PORT_GROUPS = 3
+        VCENTER_PORT_GROUPS = 3,
+        BRNONE              = 4
     };
 
     static string driver_to_str(VirtualNetworkDriver ob)
@@ -143,6 +144,8 @@ public:
                 return "openvswitch";
             case VCENTER_PORT_GROUPS:
                 return "vcenter_port_groups";
+            case BRNONE:
+                return "none";
                 break;
         }
     };
@@ -161,6 +164,10 @@ public:
         {
             return VCENTER_PORT_GROUPS;
         }
+        else if (ob == "none")
+        {
+            return BRNONE;
+        }
         else
         {
             return UNDEFINED;
@@ -173,7 +180,7 @@ public:
      *    @param error_str describing the error
      *    @return 0 on success -1 otherwise
      */
-    static int parse_phydev_vlans(const Template& tmpl, const string& vn_mad, const string& phydev, 
+    static int parse_phydev_vlans(const Template* tmpl, const string& vn_mad, const string& phydev, 
                                   const string& bridge, const bool auto_id, const string& vlan_id, 
                                   const bool auto_outer, const string& outer_id, string& estr);
 

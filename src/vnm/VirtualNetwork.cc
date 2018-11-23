@@ -141,7 +141,7 @@ LIST OF MANDATORY ARGUMENTS FOR NETWORK DEFINITION
 | ovswitch_vxlan | yes     | no     | OUTER or AUTOMATIC_OUTER |                |
 +----------------+---------+--------+--------------------------+----------------+
 */
-int VirtualNetwork::parse_phydev_vlans(const Template& tmpl, const string& vn_mad, const string& phydev, 
+int VirtualNetwork::parse_phydev_vlans(const Template* tmpl, const string& vn_mad, const string& phydev, 
                                        const string& bridge, const bool auto_id, const string& vlan_id, 
                                        const bool auto_outer, const string& outer_id, string& estr)
 {
@@ -150,15 +150,8 @@ int VirtualNetwork::parse_phydev_vlans(const Template& tmpl, const string& vn_ma
     bool check_vlan   = false;
     bool check_outer  = false;
 
-    bool check_other  = false;
-    vector<string> other;
-
     switch (VirtualNetwork::str_to_driver(vn_mad))
     {
-        case VirtualNetwork::VCENTER:
-            other.push_back("VCENTER_NET_REF");
-            check_other = true;
-
         case VirtualNetwork::DUMMY:
             check_bridge = true;
             break;
@@ -173,6 +166,7 @@ int VirtualNetwork::parse_phydev_vlans(const Template& tmpl, const string& vn_ma
             check_outer  = true;
 
         case VirtualNetwork::BRIDGE:
+        case VirtualNetwork::VCENTER:
         case VirtualNetwork::OVSWITCH:
         case VirtualNetwork::EBTABLES:
         case VirtualNetwork::FW:
@@ -204,21 +198,6 @@ int VirtualNetwork::parse_phydev_vlans(const Template& tmpl, const string& vn_ma
     {
         estr = "OUTER_VLAN_ID (or AUTOMATIC) is mandatory for driver " + vn_mad;
         return -1;
-    }
-
-    if ( check_other )
-    {
-        vector<string>::iterator it;
-        string value;
-
-        for ( it = other.begin(); it != other.end() ; ++it)
-        {
-            if (!tmpl.get((*it).c_str(), value))
-            {
-                estr = *it + " is mandatory for driver " + vn_mad;
-                return -1;
-            }
-        }
     }
 
     return 0;
@@ -323,7 +302,18 @@ int VirtualNetwork::insert(SqlDB * db, string& error_str)
         goto error_parse;
     }
 
-    if (bridge.empty())
+    erase_template_attribute("BRIDGE_TYPE", bridge_type);
+
+    rc = parse_bridge_type(vn_mad, error_str);
+
+    if (rc != 0)
+    {
+        goto error_common;
+    }
+
+    add_template_attribute("BRIDGE_TYPE", bridge_type);
+
+    if (bridge.empty() && bridge_type != "none")
     {
         ostringstream oss;
 
@@ -342,17 +332,6 @@ int VirtualNetwork::insert(SqlDB * db, string& error_str)
     }
 
     add_template_attribute("BRIDGE", bridge);
-
-    erase_template_attribute("BRIDGE_TYPE", bridge_type);
-
-    rc = parse_bridge_type(vn_mad, error_str);
-
-    if (rc != 0)
-    {
-        goto error_common;
-    }
-
-    add_template_attribute("BRIDGE_TYPE", bridge_type);
 
     //--------------------------------------------------------------------------
     // Get the Address Ranges
