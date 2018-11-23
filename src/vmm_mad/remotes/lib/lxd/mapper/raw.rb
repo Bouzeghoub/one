@@ -42,6 +42,8 @@ class RAW < Mapper
 
     def get_parts(block)
         parts = super(block)
+        return block if parts == block
+
         parts.each do |part|
             match = 'dev'
             index = part['name'].index(match) + match.length

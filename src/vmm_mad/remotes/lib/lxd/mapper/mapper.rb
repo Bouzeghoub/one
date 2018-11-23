@@ -19,13 +19,15 @@
 require 'fileutils'
 require 'json'
 require 'fstab'
+require 'tempfile'
 
 # Mapping disks on the host
 class Mapper
 
     FILTER = /\d+p\d+\b/
-    TMP_FSTAB = '/tmp/one-fstab'
+
     # TODO: Add shell command wrapper, with optional redir, sudo, chomp, etc.
+    # TODO: Implement classes for devices, partitions
     BASH_NIL = '> /dev/null 2>&1'
 
     # TODO: validate mounts with unmaps
@@ -79,15 +81,19 @@ class Mapper
 
         parts.each do |part|
             mount_simple(part['name'], directory)
-            cp("#{directory}/etc/fstab", TMP_FSTAB, true)
+
+            tmp_fstab = fstab_name
 
             begin
-                # TODO: Validate fstab is an fstab
-                fstab = Fstab.new(TMP_FSTAB)
-            rescue StandardError => exception
+                cp("#{directory}/etc/fstab", tmp_fstab, true)
+            rescue StandardError
                 umount(directory)
-                raise exception
+                next
             end
+
+            fstab = Fstab.new(tmp_fstab) # TODO: Validate fstab is an fstab
+
+            File.delete tmp_fstab
 
             break fstab if fstab
 
@@ -100,8 +106,8 @@ class Mapper
     # Returns a hash  with part => mountpoint
     def parse_fstab(fstab, partitions)
         mounts = {}
-        fstab.entries.each_value do |val|
-            mounts[val[:uuid]] = val[:mount_point]
+        fstab.entries.each_value do |entry|
+            mounts[entry[:uuid]] = entry[:mount_point]
         end
         partitions.entries.each do |part|
             next unless mounts.key?(part['uuid'])
@@ -109,6 +115,14 @@ class Mapper
             mounts[part['name']] = mounts[part['uuid']]
             mounts.delete(part['uuid'])
         end
+
+        # Remmove fstab anomalies
+        STDERR.puts mounts
+        mounts.each_key do |device|
+            STDERR.puts device
+            mounts.delete(device) unless device.class == String && device.include?('/dev')
+        end
+
         mounts
     end
 
@@ -165,10 +179,15 @@ class Mapper
 
     # Returns the partitions of the block device and mounts them in directory, according to their fstab
     def multimap(parts, directory)
+        STDERR.puts '----------------'
+
         fstab = detect_fstab(parts, directory)
 
         mounts = parse_fstab(fstab, parts)
         mounts = sort_mounts(mounts, false)
+        STDERR.puts mounts
+
+        STDERR.puts '----------------'
         mounts.each do |part, dest|
             next if dest == '/'
 
@@ -181,8 +200,10 @@ class Mapper
         get_parent_device(device) # part becomes dev
         parts = get_parts(device)
 
-        cp("#{directory}/etc/fstab", TMP_FSTAB, true)
-        fstab = Fstab.new(TMP_FSTAB)
+        tmp_fstab = fstab_name
+        cp("#{directory}/etc/fstab", tmp_fstab, true)
+        fstab = Fstab.new(tmp_fstab)
+        File.delete(tmp_fstab)
 
         mounts = parse_fstab(fstab, parts)
         mounts = sort_mounts(mounts, true)
@@ -200,7 +221,7 @@ class Mapper
             device = map(disk)
 
             fs_format = get_format(device)
-            resize(device, directory, fs_format)
+            resize(device, directory, fs_format) unless fs_format.nil? || fs_format == 'iso9660'
 
             mount(device, directory)
         when 'unmap'
@@ -216,7 +237,7 @@ class Mapper
 
     def cp(src, dst, sudo = false)
         sudo = 'sudo' if sudo == true
-        `#{sudo} cp #{src} #{dst}`
+        shell("#{sudo} cp #{src} #{dst} && #{sudo} chown oneadmin:oneadmin #{dst}")
     end
 
     def mkdir(directory)
@@ -225,12 +246,28 @@ class Mapper
         `sudo mkdir -p #{directory}`
     end
 
+    def fstab_name
+        file = Tempfile.new('fstab')
+        path = file.path
+        file.unlink
+        path
+    end
+
     def partition?(device)
         FILTER.match? device
     end
 
+    def partitions?(block)
+        parts = get_parts(block)
+        return false if parts == block
+
+        true
+    end
+
     # Returns the filesystem type of a block device
     def get_format(block)
+        return if partitions?(block)
+
         fs_format = `lsblk -f #{block} | grep -w #{block.split('/dev/')[-1]} | awk  \'{print $2}\'`.chomp
         return fs_format if fs_format != '' # Linux takes a bit to prepare the info
 
