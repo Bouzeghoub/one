@@ -117,9 +117,7 @@ class Mapper
         end
 
         # Remmove fstab anomalies
-        STDERR.puts mounts
         mounts.each_key do |device|
-            STDERR.puts device
             mounts.delete(device) unless device.class == String && device.include?('/dev')
         end
 
@@ -179,15 +177,10 @@ class Mapper
 
     # Returns the partitions of the block device and mounts them in directory, according to their fstab
     def multimap(parts, directory)
-        STDERR.puts '----------------'
-
         fstab = detect_fstab(parts, directory)
 
         mounts = parse_fstab(fstab, parts)
         mounts = sort_mounts(mounts, false)
-        STDERR.puts mounts
-
-        STDERR.puts '----------------'
         mounts.each do |part, dest|
             next if dest == '/'
 
