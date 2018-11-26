@@ -29,62 +29,67 @@ require 'open3'
 
 # This module can be used to execute commands. It wraps popen3 and provides
 # locking capabilites using flock
+# TODO: Separate class in a file for mappers
 module Command
-    def self.execute(cmd, block)
-        rc = -1
-        stdout = ''
-        stderr = ''
 
-        begin
-            fd = lock if block
+    class << self
 
-            Open3.popen3(cmd) { |i, o, e, t| 
-                rc = t.value 
+        # Executes +cmd+, creates a block if +block+ exists
+        # Output reading can be skipped, returning only the thread
+        def execute(cmd, block, output)
+            rc = -1
 
-                stdout = o.read
-                stderr = e.read
+            if output
+                stdout = ''
+                stderr = ''
+            end
 
-                o.close
-                e.close
-            }
-        rescue
+            begin
+                fd = lock if block
 
-        ensure
-            unlock(fd) if block
+                Open3.popen3(cmd) do |_i, o, e, t|
+                    rc = t.value
+
+                    if output
+                        stdout = o.read
+                        stderr = e.read
+
+                        o.close
+                        e.close
+                    end
+                end
+            rescue
+            ensure
+                unlock(fd) if block
+            end
+
+            return [rc, stdout, stderr] if output
+
+            rc
         end
 
-        [rc, stdout, stderr]
+        # Return true if command is running
+        def running?(command)
+            !`ps  --noheaders -C #{command}`.empty?
+        end
+
+        private
+
+        LOCK_FILE = '/tmp/onelxd-lock'
+
+        def lock
+            lfd = File.open(LOCK_FILE, 'w')
+            lfd.flock(File::LOCK_EX)
+
+            lfd
+        end
+
+        def unlock(lfd)
+            lfd.close
+        end
+
     end
 
-    def self.execute_once(cmd, lock)
-        execute(cmd, lock) unless running?(bin)
-    end
-
-    def self.lxc_execute(cmd, lxd_id)
-
-        cmd = "lxc exec #{lxd_id} #{cmd}"
-
-    end
-
-    # Return true if command is running
-    def running?(command)
-        !`ps  --noheaders -C #{command}`.empty?
-    end
-
-    private
-
-    LOCK_FILE = '/tmp/onelxd-lock'
-
-    def self.lock
-        lfd = File.open(LOCK_FILE,"w")
-        lfd.flock(File::LOCK_EX)
-
-        return lfd
-    end
-
-    def self.unlock(lfd)
-        lfd.close
-    end
 end
 
 # This class interacts with the LXD container on REST level
@@ -210,7 +215,8 @@ class Container
 
     # Runs command inside container
     def exec(command)
-        `lxc exec #{name} #{command}`
+        lxd_command = "lxc exec #{name} -- #{command}"
+        Command.execute(lxd_command, false, true)
     end
 
     #---------------------------------------------------------------------------
@@ -463,20 +469,18 @@ class Container
 
         vnc_args = "-w #{w} -h #{h} -t #{t}"
 
+        pipe = '/tmp/svncterm_server_pipe'
         bin = 'svncterm_server'
-        server = "#{__dir__}/#{bin} #{vnc_args}"
+        server = "#{bin} #{vnc_args}"
 
-        Open3.popen3("#{server}") {|i, o, e, t| rc = t.value } unless running?(bin)
+        Command.execute(server, true, false) unless Command.running?(bin)
 
-        `#{command}`
+        File.open(pipe, 'a') do |f|
+            f.write command
+        end
     end
 
     private
-
-    # Return an array of pids matching the command or nil if not found
-    def running?(command)
-        !`ps  --noheaders -C #{command}`.empty?
-    end
 
     # Waits or no for response depending on wait value
     def wait?(response, wait, timeout)
