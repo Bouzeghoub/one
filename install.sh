@@ -619,7 +619,6 @@ BIN_FILES="src/nebula/oned \
            src/cli/onevntemplate \
            src/onedb/onedb \
            src/mad/utils/tty_expect \
-           src/svncterm_server/svncterm_server \
            share/scripts/one"
 
 #-------------------------------------------------------------------------------
@@ -754,6 +753,7 @@ VMM_EXEC_LXD_LIB="src/vmm_mad/remotes/lib/lxd/opennebula_vm.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/raw.rb \
                 src/vmm_mad/remotes/lib/lxd/mapper/rbd.rb \
                 src/vmm_mad/remotes/lib/lxd/client.rb \
+                src/vmm_mad/remotes/lib/lxd/command.rb \
                 src/vmm_mad/remotes/lib/lxd/container.rb"
 
 #-------------------------------------------------------------------------------

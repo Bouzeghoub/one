@@ -16,259 +16,323 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+$LOAD_PATH.unshift File.dirname(__FILE__)
+
 require 'fileutils'
 require 'json'
-require 'fstab'
-require 'tempfile'
 
-# Mapping disks on the host
+require 'opennebula_vm'
+require 'command'
+
+#require_relative '../../scripts_common'
+
+# Mappers class provides an interface to map devices into the host filesystem
+# This class uses an array of partitions as output by lsblk in JSON:
+#  [ 
+#    {
+#     "name"   : "loop1p3", 
+#     "path"   : "/dev/mapper/loop1p3",
+#     "type"   : "part",
+#     "fstype" : "..", 
+#     "label"  : null, 
+#     "uuid"   : null, 
+#     "fsavail": "...M", 
+#     "fsuse%" : "..%", 
+#     "mountpoint":"/boot" 
+#     },
+#     {
+#      ....
+#      children : [
+#      ]
+#     }
+# ]
 class Mapper
+    #---------------------------------------------------------------------------
+    # Class constants
+    #---------------------------------------------------------------------------
+    COMMANDS = {
+        :lsblk   => 'sudo lsblk',
+        :losetup => 'sudo losetup',
+        :mount   => 'sudo mount',
+        :umount  => 'sudo umount',
+        :kpartx  => 'sudo kpartx',
+        :nbd     => 'sudo qemu-nbd',
+        :mkdir_p => 'sudo mkdir -p',
+        :cat     => 'sudo cat',
+        :file    => 'file',
+    }
 
-    FILTER = /\d+p\d+\b/
+    #---------------------------------------------------------------------------
+    # Interface to be implemented by specific mapper modules
+    #---------------------------------------------------------------------------
 
-    # TODO: Add shell command wrapper, with optional redir, sudo, chomp, etc.
-    # TODO: Implement classes for devices, partitions
-    BASH_NIL = '> /dev/null 2>&1'
-
-    # TODO: validate mounts with unmaps
-    def mount(block, path)
-        mount_simple(block, path)
-    rescue StandardError
-        raise "cannot mount partition #{block}" if partition?(block)
-
-        parts = get_parts(block)
-
-        return multimap(parts, path) unless parts == block
-
-        unmap(block)
-        raise "cannot mount device #{block}"
+    # Maps the disk to host devices
+    # @param onevm [OpenNebulaVM] with the VM description
+    # @param disk [XMLElement] with the disk data
+    # @param directory [String] where the disk has to be mounted
+    # @return [String] Name of the mapped device, empty in case of error. 
+    #
+    # Errors should be log using OpenNebula driver functions
+    def do_map(one_vm, disk, directory)
+        OpenNebula.log_error("map function not implemented for #{self.class}")
+        return nil
     end
 
-    def mount_simple(block, path)
-        mkdir(path)
-        shell("sudo mount #{block} #{path} #{BASH_NIL}")
+    # Unmaps a previously mapped partition
+    # @param device [String] where the disk is mapped
+    # @param disk [XMLElement] with the disk data
+    # @param directory [String] where the disk has to be mounted
+    #
+    # @return nil 
+    def do_unmap(device, one_vm, disk, directory)
+        OpenNebula.log_error("unmap function not implemented for #{self.class}")
+        return nil
     end
 
-    def umount(path)
-        shell("sudo umount #{path}")
+    #---------------------------------------------------------------------------
+    # Mapper Interface 'map' & 'unmap' methods
+    #---------------------------------------------------------------------------
+
+    # Maps a disk to a given directory
+    # @param onevm [OpenNebulaVM] with the VM description
+    # @param disk [XMLElement] with the disk data
+    # @param directory [String] Path to the directory where the disk has to be 
+    # mounted. Example: /var/lib/one/datastores/100/3/mapper/disk.2
+    #
+    # @return true on success
+    def map(one_vm, disk, directory)
+        device = do_map(one_vm, disk, directory)
+
+        OpenNebula.log_info "Mapping disk at #{directory} using device #{device}"
+
+        return false if !device
+
+        partitions = lsblk(device)
+
+        return false if !partitions
+
+        mount(partitions, directory)
     end
 
-    # Returns the block device associated to a mount
-    def detect(path)
-        `sudo df -h #{path} | grep /dev | awk '{print $1}'`.chomp("\n")
+    # Unmaps a disk from a given directory
+    # @param disk [XMLElement] with the disk data
+    # @param directory [String] Path to the directory where the disk has to be 
+    # mounted. Example: /var/lib/one/datastores/100/3/mapper/disk.2
+    #
+    # @return true on success
+    def unmap(one_vm, disk, directory)
+        OpenNebula.log_info "Unmapping disk at #{directory}"
+
+        sys_parts  = lsblk('')
+        partitions = []
+        device     = ''
+
+        return false if !sys_parts
+
+        sys_parts.each { |d|
+            if d['mountpoint'] == directory
+                partitions = [d]
+                device     = d['path']
+                break
+            end
+
+            d['children'].each { |c|
+                if c['mountpoint'] == directory
+                    partitions = d['children']
+                    device     = d['path']
+                    break
+                end
+            } if d['children']
+
+            break if !partitions.empty?
+        }
+
+        partitions.delete_if { |p| !p['mountpoint'] }
+
+        partitions.sort! { |a,b|  
+            b['mountpoint'].length <=> a['mountpoint'].length 
+        }
+
+        umount(partitions)
+
+        do_unmap(device, one_vm, disk, directory)
+
+        return true
     end
 
-    # Extends a block device depending on the filesystem
-    def resize(block, directory, fs_format)
-        case fs_format
-        when 'ext4'
-            `sudo e2fsck -f -y #{block} #{BASH_NIL}; sudo resize2fs #{block} #{BASH_NIL}`
-        when 'xfs'
-            mount_simple(block, directory)
-            `sudo xfs_growfs -d #{directory} #{BASH_NIL}`
-            umount(directory)
-        else
-            STDERR.puts "format #{fs_format} not supported"
-            exit 1
-        end
+    private
+    #---------------------------------------------------------------------------
+    # Methods to mount/umount partitions         
+    #---------------------------------------------------------------------------
+
+    # Umounts partitions
+    # @param partitions [Array] with partition device names
+    def umount(partitions)
+        partitions.each { |p|
+            next if !p['mountpoint']
+
+            umount_dev(p['path'])
+        }
     end
 
-    # Returns the fstab object from an array of partitions. These partitions should belong
-    # to the same partition table. Each parition will be mounted in +directory+ until it is found
-    # in one of them a file in directory/etc/fstab
-    def detect_fstab(parts, directory)
-        fstab = nil
+    # Mounts partitions
+    # @param partitions [Array] with partition device names
+    # @param path [String] to directory to mount the disk partitions
+    def mount(partitions, path)
+        # Single partition
+        # ----------------
+        return  mount_dev(partitions[0]['path'], path) if partitions.size == 1
 
-        parts.each do |part|
-            mount_simple(part['name'], directory)
+        # Multiple partitions
+        # -------------------
+        rc    = true
+        fstab = ''
 
-            tmp_fstab = fstab_name
+        # Look for fstab and mount rootfs in path. First partition with
+        # a /etc/fstab file is used as rootfs and it is kept mounted
+        partitions.each do |p|
+            rc = mount_dev(p['path'], path)
 
-            begin
-                cp("#{directory}/etc/fstab", tmp_fstab, true)
-            rescue StandardError
-                umount(directory)
+            return false if !rc
+
+            cmd = "#{COMMANDS[:cat]} #{path}/etc/fstab"
+
+            rc, fstab, e = Command.execute(cmd, false)
+
+            if fstab.empty?
+                umount_dev(p['path'])
                 next
             end
 
-            fstab = Fstab.new(tmp_fstab) # TODO: Validate fstab is an fstab
-
-            File.delete tmp_fstab
-
-            break fstab if fstab
-
-            umount(directory)
+            break
         end
 
-        fstab
-    end
-
-    # Returns a hash  with part => mountpoint
-    def parse_fstab(fstab, partitions)
-        mounts = {}
-        fstab.entries.each_value do |entry|
-            mounts[entry[:uuid]] = entry[:mount_point]
-        end
-        partitions.entries.each do |part|
-            next unless mounts.key?(part['uuid'])
-
-            mounts[part['name']] = mounts[part['uuid']]
-            mounts.delete(part['uuid'])
+        if fstab.empty?
+            OpenNebula.log_error("mount: No fstab file found in disk partitions")
+            return false
         end
 
-        # Remmove fstab anomalies
-        mounts.each_key do |device|
-            mounts.delete(device) unless device.class == String && device.include?('/dev')
-        end
+        # Parse fstab contents & mount partitions
+        fstab.each_line do |l|
+            next if l.strip.chomp.empty?
+            next if l =~ /\s*#/
 
-        mounts
-    end
+            fs, mount_point, type, opts, dump, pass = l.split
 
-    # Returns the partitions sorted by / ocurrences in the mountpoints. Can be inverted
-    def sort_mounts(partitions, invert)
-        parts = []
-        paths = []
-        partitions.each do |key, value|
-            if value == '/'
-                parts.prepend(key)
-                paths.prepend(value)
-            else
-                value.slice!(-1) if value[-1] == '/'
-                root = value.count('/')
-                parts.insert(root, key)
-                paths.insert(root, value)
+            if l =~ /^\s*LABEL=/ # disk by LABEL
+                value = fs.split("=").last.strip.chomp
+                key   = 'label'
+            elsif l =~ /^\s*UUID=/ #disk by UUID
+                value = fs.split("=").last.strip.chomp
+                key   = 'uuid'
+            else #disk by device - NOT SUPPORTED or other FS
+                next
             end
+
+            next if mount_point == '/' || mount_point == 'swap'
+
+            partitions.each { |p|
+                next if p[key] != value
+
+                rc = mount_dev(p['path'], path + mount_point)
+                return false if !rc
+                break
+            }
         end
 
-        [parts, paths].each {|array| array.delete_if {|mount| mount.nil? } }
-
-        sorted = {}
-        0.upto(paths.length - 1) {|i| sorted[parts[i]] = paths[i] }
-
-        return sorted unless invert
-
-        Hash[sorted.to_a.reverse]
+        return rc
     end
 
-    # Return an array of possibly unmountable partitions from block
-    def detect_parts(block)
-        command = `lsblk #{block} -f -J`
-        # TODO: validate non-existing block
-        JSON.parse(command)['blockdevices'][0]['children']
-    end
+    # Functions to mount/umount devices
+    def mount_dev(dev, path)
+        OpenNebula.log_info "Mounting #{dev} at #{path}"
 
-    # Returns an array of mountable partitions from block
-    def get_parts(block)
-        parts = detect_parts(block)
-        return block if parts.nil?
+        Command.execute("#{COMMANDS[:mkdir_p]} #{path}", false)
 
-        parts.each {|part| parts.delete(part) if part['uuid'].nil? || part['fstype'] == 'swap' }
-        parts.each {|part| part['name'].insert(0, '/dev/') }
+        rc, out, err = Command.execute("#{COMMANDS[:mount]} #{dev} #{path}",true)
 
-        parts
-    end
-
-    # returns the parent device of a partition
-    def get_parent_device(partition)
-        piece = partition.slice! FILTER
-        device_id = piece[0..1 - piece.index('p')]
-        partition.insert(-1, device_id)
-    end
-
-    # Returns the partitions of the block device and mounts them in directory, according to their fstab
-    def multimap(parts, directory)
-        fstab = detect_fstab(parts, directory)
-
-        mounts = parse_fstab(fstab, parts)
-        mounts = sort_mounts(mounts, false)
-        mounts.each do |part, dest|
-            next if dest == '/'
-
-            mount_simple(part, directory + dest)
+        if rc != 0 
+            OpenNebula.log_error("mount_dev: #{err}")
+            return false
         end
-    end
-
-    # Umounts the partitions of a block device and finally unmaps de block
-    def multiunmap(device, directory)
-        get_parent_device(device) # part becomes dev
-        parts = get_parts(device)
-
-        tmp_fstab = fstab_name
-        cp("#{directory}/etc/fstab", tmp_fstab, true)
-        fstab = Fstab.new(tmp_fstab)
-        File.delete(tmp_fstab)
-
-        mounts = parse_fstab(fstab, parts)
-        mounts = sort_mounts(mounts, true)
-        mounts.each do |_part, dest|
-            umount(directory + dest)
-        end
-
-        unmap(device)
-    end
-
-    # Maps/unmamps a disk file to/from a directory
-    def run(action, directory, disk = nil)
-        case action
-        when 'map'
-            device = map(disk)
-
-            fs_format = get_format(device)
-            resize(device, directory, fs_format) unless fs_format.nil? || fs_format == 'iso9660'
-
-            mount(device, directory)
-        when 'unmap'
-            device = detect(directory)
-            return STDERR.puts "#{directory} has no associated device" if device == ''
-
-            return multiunmap(device, directory) if partition?(device)
-
-            umount(directory)
-            unmap(device)
-        end
-    end
-
-    def cp(src, dst, sudo = false)
-        sudo = 'sudo' if sudo == true
-        shell("#{sudo} cp #{src} #{dst} && #{sudo} chown oneadmin:oneadmin #{dst}")
-    end
-
-    def mkdir(directory)
-        FileUtils.mkdir_p directory
-    rescue StandardError
-        `sudo mkdir -p #{directory}`
-    end
-
-    def fstab_name
-        file = Tempfile.new('fstab')
-        path = file.path
-        file.unlink
-        path
-    end
-
-    def partition?(device)
-        FILTER.match? device
-    end
-
-    def partitions?(block)
-        parts = get_parts(block)
-        return false if parts == block
 
         true
     end
 
-    # Returns the filesystem type of a block device
-    def get_format(block)
-        return if partitions?(block)
+    def umount_dev(dev)
+        OpenNebula.log_info "Umounting disk mapped at #{dev}"
 
-        fs_format = `lsblk -f #{block} | grep -w #{block.split('/dev/')[-1]} | awk  \'{print $2}\'`.chomp
-        return fs_format if fs_format != '' # Linux takes a bit to prepare the info
-
-        get_format(block)
+        Command.execute("#{COMMANDS[:umount]} #{dev}", true)
     end
 
-    def shell(command)
-        raise 'command failed to execute' unless system(command)
+    #---------------------------------------------------------------------------
+    # Mapper helper functions
+    #---------------------------------------------------------------------------
+    # Get the partitions on the system or device
+    # @param device [String] to get the partitions from. Use and empty string
+    # for host partitions
+    # @return [Hash] with partitions
+    def lsblk(device)
+        rc, o, e = Command.execute("#{COMMANDS[:lsblk]} -OJ #{device}", false)
+
+        if rc != 0 || o.empty?
+            OpenNebula.log_error("lsblk: #{e}")
+            return nil
+        end
+
+        partitions = nil
+
+        begin
+            partitions = JSON.parse(o)['blockdevices']
+            
+            if !device.empty?
+                partitions = partitions[0]
+
+                if partitions['children']
+                    partitions = partitions['children']
+                else
+                    partitions = [partitions]
+                end
+
+                partitions.delete_if { |p|  
+                    p['fstype'].casecmp?('swap') if p['fstype']
+                }
+            end
+        rescue
+            OpenNebula.log_error("lsblk: error parsing lsblk -OJ #{device}")
+            return nil
+        end
+
+        # Fix for lsblk paths for version < 2.33
+        partitions.each { |p|
+            lsblk_path(p)
+
+            p['children'].each { |q| lsblk_path(q) } if p['children']
+        }
+
+        partitions
     end
 
+    # @return [String] the canonical disk path for the given disk
+    def disk_source(one_vm, disk)
+        ds_path = one_vm.ds_path
+        ds_id   = one_vm.sysds_id
+
+        vm_id   = one_vm.vm_id
+        disk_id = disk['DISK_ID']
+
+         "#{ds_path}/#{ds_id}/#{vm_id}/disk.#{disk_id}"
+    end
+
+    #  Adds path to the partition Hash. This is needed for lsblk version < 2.33
+    def lsblk_path(p)
+        return unless !p['path'] && p['name']
+
+        if File.exists?("/dev/#{p['name']}")
+            p['path'] = "/dev/#{p['name']}"
+        elsif File.exists?("/dev/mapper/#{p['name']}")
+            p['path'] = "/dev/mapper/#{p['name']}"
+        end
+    end
 end
+

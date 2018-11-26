@@ -20,50 +20,61 @@ $LOAD_PATH.unshift File.dirname(__FILE__)
 
 require 'mapper'
 
-# Mapping QCOW2 disks
-class QCOW2 < Mapper
+class Qcow2Mapper <  Mapper
+    # Max number of block devices. This should be set to the parameter used
+    # to load the nbd kernel module (default in kernel is 16)
+    NBDS_MAX = 256
 
-    def map(disk)
-        device = block
-        shell("sudo qemu-nbd -c #{device} #{disk}")
+    def do_map(one_vm, disk, directory)
+        device = nbd_device
+
+        return nil if device.empty?
+
+        dsrc = disk_source(one_vm, disk)
+        cmd  = "#{COMMANDS[:nbd]} -c #{device} #{dsrc}"
+
+        rc, out, err = Command.execute(cmd, true)
+
+        sleep 5 #TODO while using lsblk(device)
+
+        if rc != 0 
+            OpenNebula.log_error("do_map: #{err}")
+            return nil
+        end
+
         device
     end
 
-    def unmap(block)
-        shell("sudo qemu-nbd -d #{block}")
-    end
+    def do_unmap(device, one_vm, disk, directory)
+        cmd = "#{COMMANDS[:nbd]} -d #{device}"
 
-    def detect_parts(block)
-        parts = [{ :fstype => nil }]
-        while parts[0]['fstype'].nil?
-            sleep 0.1 # nbd takes a little to load partition info
-            parts = super(block)
+        rc, out, err = Command.execute(cmd, true)
+
+        if rc != 0
+            OpenNebula.log_error("do_unmap: #{err}")
         end
-        parts
     end
 
     private
 
-    # Returns the first valid nbd block in which to map the qcow2 disk
-    def block
-        nbds = `lsblk -l | grep nbd | awk '{print $1}'`.split("\n")
+    def nbd_device()
+        sys_parts = lsblk('')
+        device_id = -1
+        nbds      = []
 
-        nbds.each {|nbd| nbds.delete(nbd) if nbd.include?('p') }
-        nbds.map! {|nbd| nbd[3..-1].to_i }
+        sys_parts.each { |p|
+            m = p['name'].match(/nbd(\d+)/)
+            next if !m
 
-        '/dev/nbd' + valid(nbds)
+            nbds << m[1].to_i
+        }
+
+        NBDS_MAX.times { |i|
+            return "/dev/nbd#{i}" unless nbds.include?(i)
+        }
+
+        OpenNebula.log_error("nbd_device: Cannot find free nbd device")
+
+        ''
     end
-
-    # logic to return the first available nbd
-    def valid(array)
-        ref = 0
-        array.each do |number|
-            break if number != ref
-
-            ref += 1
-        end
-
-        ref.to_s
-    end
-
 end

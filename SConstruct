@@ -269,7 +269,7 @@ build_scripts=[
     'src/im_mad/collectd/SConstruct',
     'src/client/SConstruct',
     'src/docker_machine/SConstruct',
-    'src/svncterm_server/SConstruct'
+    'src/vmm_mad/remotes/lib/lxd/svncterm_server/SConstruct'
 ]
 
 for script in build_scripts:

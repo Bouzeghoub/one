@@ -21,76 +21,12 @@ $LOAD_PATH.unshift File.dirname(__FILE__)
 require 'client'
 
 require 'opennebula_vm'
+require 'command'
 
+require 'mapper'
 require 'raw'
 require 'qcow2'
 require 'rbd'
-require 'open3'
-
-# This module can be used to execute commands. It wraps popen3 and provides
-# locking capabilites using flock
-# TODO: Separate class in a file for mappers
-module Command
-
-    class << self
-
-        # Executes +cmd+, creates a block if +block+ exists
-        # Output reading can be skipped, returning only the thread
-        def execute(cmd, block, output)
-            rc = -1
-
-            if output
-                stdout = ''
-                stderr = ''
-            end
-
-            begin
-                fd = lock if block
-
-                Open3.popen3(cmd) do |_i, o, e, t|
-                    rc = t.value
-
-                    if output
-                        stdout = o.read
-                        stderr = e.read
-
-                        o.close
-                        e.close
-                    end
-                end
-            rescue
-            ensure
-                unlock(fd) if block
-            end
-
-            return [rc, stdout, stderr] if output
-
-            rc
-        end
-
-        # Return true if command is running
-        def running?(command)
-            !`ps  --noheaders -C #{command}`.empty?
-        end
-
-        private
-
-        LOCK_FILE = '/tmp/onelxd-lock'
-
-        def lock
-            lfd = File.open(LOCK_FILE, 'w')
-            lfd.flock(File::LOCK_EX)
-
-            lfd
-        end
-
-        def unlock(lfd)
-            lfd.close
-        end
-
-    end
-
-end
 
 # This class interacts with the LXD container on REST level
 class Container
@@ -280,9 +216,11 @@ class Container
 
         if @one.has_context?
             csrc = @lxc['devices']['context']['source'].clone
-            csrc.slice!('/mapper')
 
-            RAW.new.run(operation, @lxc['devices']['context']['source'], csrc)
+            context = @one.get_context_disk
+            mapper  = FSRawMapper.new
+
+            mapper.public_send(operation, @one, context, csrc)
         end
     end
 
@@ -291,9 +229,11 @@ class Container
         @one.context(@lxc['devices'])
 
         csrc = @lxc['devices']['context']['source'].clone
-        csrc.slice!('/mapper')
 
-        RAW.new.run('map', @lxc['devices']['context']['source'], csrc)
+        context = @one.get_context_disk
+        mapper  = FSRawMapper.new
+
+        mapper.map(@one, context, csrc)
 
         update
     end
@@ -304,13 +244,15 @@ class Container
         return unless @one.has_context?
 
         csrc = @lxc['devices']['context']['source'].clone
-        csrc.slice!('/mapper')
 
-        ctgt = @lxc['devices'].delete('context')['source']
+        @lxc['devices'].delete('context')['source']
 
         update
 
-        RAW.new.run('unmap', ctgt, csrc)
+        context = @one.get_context_disk
+        mapper  = FSRawMapper.new
+
+        mapper.unmap(@one, context, csrc)
     end
 
     # Attach disk to container (ATTACH = YES) in VM description
@@ -353,14 +295,15 @@ class Container
 
         csrc = @lxc['devices'][disk_name]['source'].clone
 
-        @lxc['devices'].delete(disk_name)
+
+        @lxc['devices'].delete(disk_name)['source']
 
         update
 
-        mapper = select_driver(disk_element)
-        mapper.run('unmap', csrc)
+        mapper = new_disk_mapper(@one, disk_element)
+        mapper.unmap(@one, disk_element, csrc)
     end
-
+=begin
     def resize_disk(disk_id, size)
         STDERR.puts 'work in progress'
         raise 'stop'
@@ -405,6 +348,7 @@ class Container
     rescue StandardError
         @one.disk_mountpoint(disk_id)
     end
+=end
 
     # Setup the disk by mapping/unmapping the disk device
     def setup_disk(disk, operation)
@@ -417,49 +361,19 @@ class Container
         disk_id = disk['DISK_ID']
 
         if disk_id == @one.rootfs_id
-            target = rootfs_mount
+            target = "#{@one.lxdrc[:containers]}/#{name}/rootfs"
         else
             target = @one.disk_mountpoint(disk_id)
         end
 
-        # TODO: Verify target is empty
-        source = case disk['TYPE']
-                 when 'FILE'
-                     "#{ds_path}/#{ds_id}/#{vm_id}/disk.#{disk_id}"
-                 when 'RBD'
-                     if disk['DISK_CLONE'] == 'YES'
-                         "#{disk['SOURCE']}-#{vm_id}-#{disk_id}"
-                     else
-                         disk['SOURCE']
-                     end
-                 end
-
-        mapper = select_driver(disk)
-
-        mapper.run(operation, target, source)
-    end
-
-    # Returns a mapper object depending on the driver string
-    def select_driver(info)
-        case info['TYPE']
-        when 'FILE'
-            case info['DRIVER']
-            when 'raw'
-                RAW.new
-            when 'qcow2'
-                QCOW2.new
-            else
-                log = 'Missing DRIVER field in VM template: trying raw image'
-                OpenNebula.log log
-                RAW.new
-            end
-        when 'RBD'
-            RBD.new(info['CEPH_USER'])
-        end
+        mapper = new_disk_mapper(disk)
+        mapper.public_send(operation, @one, disk, target)
     end
 
     # Start the svncterm server if it is down.
     def vnc(signal)
+        return
+=begin
         command = @one.vnc_command(signal)
         return if command.nil?
 
@@ -470,14 +384,20 @@ class Container
         vnc_args = "-w #{w} -h #{h} -t #{t}"
 
         pipe = '/tmp/svncterm_server_pipe'
-        bin = 'svncterm_server'
+        bin  = 'svncterm_server'
         server = "#{bin} #{vnc_args}"
 
-        Command.execute(server, true, false) unless Command.running?(bin)
+        Command.execute_once(server, true)
+
+        lfd = Command.lock
 
         File.open(pipe, 'a') do |f|
             f.write command
         end
+
+    ensure
+        Command.unlock(lfd) if lfd
+=end
     end
 
     private
@@ -500,4 +420,42 @@ class Container
         status
     end
 
+    # Returns a mapper for the disk
+    #  @param disk [XMLElement] with the disk data
+    #
+    #  TODO This maps should be built dynamically or based on a DISK attribute
+    #  so new mappers does not need to modified source code
+    def new_disk_mapper(disk)
+        case disk['TYPE']
+        when 'FILE'
+            ds_path = @one.ds_path
+            ds_id   = @one.sysds_id
+
+            vm_id   = @one.vm_id
+            disk_id = disk['DISK_ID']
+
+            ds = "#{ds_path}/#{ds_id}/#{vm_id}/disk.#{disk_id}"
+
+            rc, out, err = Command.execute("#{Mapper::COMMANDS[:file]} #{ds}", false)
+
+            case out
+            when /.*QEMU QCOW.*/
+                OpenNebula.log "Using qcow2 mapper for #{ds}"
+                return Qcow2Mapper.new
+            when /.*filesystem.*/
+                OpenNebula.log "Using raw filesystem mapper for #{ds}"
+                return FSRawMapper.new
+            when /.*boot sector.*/ 
+                OpenNebula.log "Using raw disk mapper for #{ds}"
+                return DiskRawMapper.new
+            else
+                OpenNebula.log('Unknown image format, trying raw filesystem mapper')
+                return FSRawMapper.new
+            end
+        when 'RBD'
+            return RBDMapper.new
+        end
+    end
+
 end
+

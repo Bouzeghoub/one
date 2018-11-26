@@ -20,48 +20,69 @@ $LOAD_PATH.unshift File.dirname(__FILE__)
 
 require 'mapper'
 
-# Mapping RAW disks
-class RAW < Mapper
+#-------------------------------------------------------------------------------
+# These classes implements the mapping of raw filesystems & raw disk images
+#-------------------------------------------------------------------------------
+class FSRawMapper < Mapper
+    def do_map(one_vm, disk, directory)
+        dsrc = disk_source(one_vm, disk)
+        cmd  = "#{COMMANDS[:losetup]} -f --show #{dsrc}"
 
-    def map(disk)
-        `sudo losetup -f --show #{disk}`.chomp
-    end
+        rc, out, err = Command.execute(cmd, true)
 
-    def unmap(block)
-        hide_parts(block)
-        shell("sudo losetup -d #{block}")
-    end
-
-    def detect_parts(block)
-        super(block) unless kpartx('av', block) == ''
-    end
-
-    def hide_parts(block)
-        kpartx('dv', block)
-    end
-
-    def get_parts(block)
-        parts = super(block)
-        return block if parts == block
-
-        parts.each do |part|
-            match = 'dev'
-            index = part['name'].index(match) + match.length
-            part['name'].insert(index, '/mapper')
+        if rc != 0 || out.empty?
+            OpenNebula.log_error("do_map: #{err}")
+            return nil
         end
-        parts
+
+        out.chomp
     end
 
-    def get_parent_device(partition)
-        partition.slice!('/mapper')
-        super(partition)
+    def do_unmap(device, one_vm, disk, directory)
+        cmd = "#{COMMANDS[:losetup]} -d #{device}"
+
+        rc, out, err = Command.execute(cmd, true)
+
+        if rc != 0
+            OpenNebula.log_error("do_unmap: #{err}")
+        end
+    end
+end
+
+class DiskRawMapper < Mapper
+    # Maps the whole file using kpartx. The output should be something like:
+    #   $ sudo kpartx -av /var/lib/one/datastores/100/0/disk.0
+    #   add map loop3p1 (253:0): 0 204800 linear 7:3 2048
+    #   add map loop3p2 (253:1): 0 524288 linear 7:3 206848
+    #   add map loop3p3 (253:2): 0 1366016 linear 7:3 731136
+    # Fisrt line is matched to look for loop device 3, and return "/dev/loop3"
+    def do_map(one_vm, disk, directory)
+        dsrc = disk_source(one_vm, disk)
+        cmd  = "#{COMMANDS[:kpartx]} -av #{dsrc}"
+
+        rc, out, err = Command.execute(cmd, true)
+
+        if rc != 0 || out.empty?
+            OpenNebula.log_error("do_map: #{err}")
+            return nil
+        end
+
+        loopdev = out.lines[0].match(/.*add map loop(\d+)p\d+.*/)
+
+        return nil if !loopdev
+
+        "/dev/loop#{loopdev[1]}"
     end
 
-    private
+    # Unmaps all devices and loops with kpartx using the source file
+    def do_unmap(device, one_vm, disk, directory)
+        dsrc = disk_source(one_vm, disk)
+        cmd  = "#{COMMANDS[:kpartx]} -d #{dsrc}"
 
-    # kpartx command with flags and device interface
-    def kpartx(flags, block)
-        `sudo kpartx -#{flags} #{block}`
+        rc, out, err = Command.execute(cmd, true)
+
+        if rc != 0
+            OpenNebula.log_error("do_unmap: #{err}")
+        end
     end
-
 end

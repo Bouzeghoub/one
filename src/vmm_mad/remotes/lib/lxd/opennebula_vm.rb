@@ -182,6 +182,10 @@ class OpenNebulaVM
         end
     end
 
+    def get_context_disk()
+        @xml.element('//TEMPLATE/CONTEXT')
+    end
+
     def get_disks
         @xml.elements('//TEMPLATE/DISK')
     end
@@ -339,10 +343,9 @@ class OpenNebulaVM
 
         if signal == 'start'
             command = @lxdrc[:vnc][:command]
-            command ||= 'bash'
-            "#{data['PORT']} #{pass} lxc exec #{@vm_name} #{command}"
+            "#{data['PORT']} #{pass} lxc exec #{@vm_name} #{command}\n"
         elsif signal == 'stop'
-            "-#{data['PORT']}"
+            "-#{data['PORT']}\n"
         end
     end
 
