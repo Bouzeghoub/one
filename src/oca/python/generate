@@ -16,7 +16,12 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+virtualenv .
+source bin/activate
+pip install --upgrade setuptools wheel
+
 pip install generateds # Install build dependencies
 make dist		       # Create python package
-pip install requirements.txt # pydoc generation required deps
+pip install -r requirements.txt # pydoc generation required deps
 make doc
+deactivate > /dev/null
