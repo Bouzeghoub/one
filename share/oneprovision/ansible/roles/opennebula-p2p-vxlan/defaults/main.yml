@@ -1,0 +1,12 @@
+---
+
+###############################################################################
+# Valid defaults
+###############################################################################
+
+opennebula_p2p_vxlan_bridge: NULL
+opennebula_p2p_vxlan_phydev: NULL
+opennebula_p2p_vxlan_vxlan_vni: NULL
+opennebula_p2p_vxlan_vxlan_dev: NULL
+opennebula_p2p_vxlan_vxlan_local_ip: NULL
+opennebula_p2p_vxlan_remotes: []

@@ -1,0 +1,27 @@
+---
+
+- hosts: all
+  gather_facts: false
+  roles:
+    - python
+
+- hosts: nodes
+  roles:
+    - ddc
+    - opennebula-repository
+    - opennebula-node-kvm
+    - opennebula-ssh
+    - tuntap
+    - bridged-networking
+    - iptables
+
+- hosts: nodes
+  vars:
+    opennebula_p2p_vxlan_bridge: vxbr100
+    opennebula_p2p_vxlan_phydev: bond0:0
+    opennebula_p2p_vxlan_vxlan_vni: 100
+    opennebula_p2p_vxlan_vxlan_dev: vxlan100
+    opennebula_p2p_vxlan_vxlan_local_ip: '{{ ansible_facts["bond0_0"]["ipv4"]["address"] }}'
+    opennebula_p2p_vxlan_remotes: "{{ groups['nodes'] | map('extract', hostvars, ['ansible_bond0_0', 'ipv4', 'address']) | list }}"
+  roles:
+    - opennebula-p2p-vxlan
